@@ -190,7 +190,7 @@ def print_players_by_rule_level(available_players: pd.DataFrame) -> None:
 
     print("\n=== Players Satisfying Each Rule Level ===\n")
     
-    for level in range(1, 16):
+    for level in range(1, 15):
         level_players = available_players[available_players['priority_level'] == level]
         
         if not level_players.empty:
@@ -199,8 +199,8 @@ def print_players_by_rule_level(available_players: pd.DataFrame) -> None:
             
             # Sort players by BPRE and base stat within the rule level
             level_players_sorted = level_players.sort_values(
-                by=['Base exceeds price premium', 'Total base'],
-                ascending=[False, False]
+                by=['Base exceeds price premium'],
+                ascending=[False]
             )
             
             for _, player in level_players_sorted.iterrows():
@@ -225,14 +225,28 @@ def calculate_trade_options(
     latest_round = consolidated_data['Round'].max()
     current_round_data = consolidated_data[consolidated_data['Round'] == latest_round].copy()
     
-    # Calculate total salary freed up and get traded out players' info
-    traded_players = current_round_data[current_round_data['Player'].isin(traded_out_players)]
-    if traded_players.empty:
-        print("\nError: None of the traded out players were found in the data")
-        return []
-        
+    # Get traded players' data from their most recent appearance
+    traded_players_data = []
+    for player_name in traded_out_players:
+        # Get all appearances of the player and find their most recent data
+        player_history = consolidated_data[consolidated_data['Player'] == player_name]
+        if not player_history.empty:
+            most_recent_data = player_history.loc[player_history['Round'].idxmax()]
+            traded_players_data.append(most_recent_data)
+        else:
+            print(f"\nError: Could not find any data for player: {player_name}")
+            return []
+    
+    # Convert to DataFrame for easier handling
+    traded_players = pd.DataFrame(traded_players_data)
     salary_freed = traded_players['Price'].sum()
     num_players_needed = len(traded_out_players)
+    
+    # Debug print for traded players
+    print(f"\nTraded out players' details:")
+    for _, player in traded_players.iterrows():
+        print(f"- {player['Player']}: ${player['Price']:,} (Round {player['Round']})")
+    print(f"Total salary freed: ${salary_freed:,}")
     
     # Get all available players (excluding traded out players)
     available_players = current_round_data[~current_round_data['Player'].isin(traded_out_players)].copy()
