@@ -203,20 +203,35 @@ def print_players_by_rule_level(available_players: pd.DataFrame, consolidated_da
         print("\n=== Top Players by Average Base Stats ===\n")
         print("-" * 80)
         
-        # Calculate average base for display
-        available_players = available_players.copy()
-        available_players['avg_base'] = available_players['Player'].apply(
-            lambda x: calculate_average_base(x, consolidated_data)
-        )
+        # Get all players who have played in any of the last 3 rounds
+        last_three_rounds = sorted(consolidated_data['Round'].unique())[-3:]
+        recent_players_data = consolidated_data[consolidated_data['Round'].isin(last_three_rounds)]
+        all_players = recent_players_data['Player'].unique()
         
-        # Sort and display top players
-        top_players = available_players.nlargest(10, 'avg_base')
+        # Calculate average base for all players
+        player_stats = []
+        for player in all_players:
+            avg_base = calculate_average_base(player, consolidated_data)
+            player_recent = consolidated_data[consolidated_data['Player'] == player].sort_values('Round', ascending=False).iloc[0]
+            player_stats.append({
+                'Player': player,
+                'POS': player_recent['POS'],
+                'Age': player_recent['Age'],
+                'Current Base': player_recent['Total base'],
+                'avg_base': avg_base,
+                'Price': player_recent['Price']
+            })
+        
+        # Convert to DataFrame and sort by average base
+        stats_df = pd.DataFrame(player_stats)
+        top_players = stats_df.nlargest(10, 'avg_base')
+        
         for _, player in top_players.iterrows():
             print(
                 f"Player: {player['Player']:<20} "
                 f"Position: {player['POS']:<5} "
                 f"Age: {player['Age']:<3} "
-                f"Current Base: {player['Total base']:>5.1f} "
+                f"Current Base: {player['Current Base']:>5.1f} "
                 f"Avg Base: {player['avg_base']:>5.1f} "
                 f"Price: ${player['Price']:,}"
             )
@@ -285,33 +300,26 @@ def calculate_trade_options(
     If maximize_base is True, prioritize players with highest base stats instead of BPRE.
     """
     latest_round = consolidated_data['Round'].max()
-    current_round_data = consolidated_data[consolidated_data['Round'] == latest_round].copy()
+    last_three_rounds = sorted(consolidated_data['Round'].unique())[-3:]
     
-    # Get traded players' data from their most recent appearance
-    traded_players_data = []
-    for player_name in traded_out_players:
-        # Get all appearances of the player and find their most recent data
-        player_history = consolidated_data[consolidated_data['Player'] == player_name]
-        if not player_history.empty:
-            most_recent_data = player_history.loc[player_history['Round'].idxmax()]
-            traded_players_data.append(most_recent_data)
-        else:
-            print(f"\nError: Could not find any data for player: {player_name}")
-            return []
-    
-    # Convert to DataFrame for easier handling
-    traded_players = pd.DataFrame(traded_players_data)
-    salary_freed = traded_players['Price'].sum()
+    # Get number of players needed based on traded out players
     num_players_needed = len(traded_out_players)
     
-    # Debug print for traded players
-    print(f"\nTraded out players' details:")
-    for _, player in traded_players.iterrows():
-        print(f"- {player['Player']}: ${player['Price']:,} (Round {player['Round']})")
-    print(f"Total salary freed: ${salary_freed:,}")
+    # Calculate total salary freed up from traded out players
+    salary_freed = 0
+    for player in traded_out_players:
+        player_data = consolidated_data[consolidated_data['Player'] == player].sort_values('Round', ascending=False)
+        if not player_data.empty:
+            salary_freed += player_data.iloc[0]['Price']
+        else:
+            print(f"Warning: Could not find price data for {player}")
     
-    # Get all available players (excluding traded out players)
-    available_players = current_round_data[~current_round_data['Player'].isin(traded_out_players)].copy()
+    print(f"Total salary freed up: ${salary_freed:,}")
+    
+    # Get all players who have played in any of the last 3 rounds
+    recent_players_data = consolidated_data[consolidated_data['Round'].isin(last_three_rounds)]
+    available_players = (recent_players_data[~recent_players_data['Player'].isin(traded_out_players)]
+                        .groupby('Player').last().reset_index())
     
     # Initialize consecutive_good_weeks column
     available_players['consecutive_good_weeks'] = 0
@@ -324,18 +332,17 @@ def calculate_trade_options(
         )
         available_players.at[idx, 'consecutive_good_weeks'] = consecutive_weeks
     
-    # Now calculate priority levels
-    available_players['priority_level'] = available_players.apply(assign_priority_level, axis=1)
-    
-    # Calculate average BPRE for each player
+    # Calculate averages using all available games in last 3 rounds
     available_players['avg_bpre'] = available_players['Player'].apply(
         lambda x: calculate_average_bpre(x, consolidated_data)
     )
-
-    # Calculate average base for each player
+    
     available_players['avg_base'] = available_players['Player'].apply(
         lambda x: calculate_average_base(x, consolidated_data)
     )
+
+    # Now calculate priority levels
+    available_players['priority_level'] = available_players.apply(assign_priority_level, axis=1)
 
     if hybrid_approach:
         # First get the best player based on BPRE rules
@@ -689,11 +696,32 @@ if __name__ == "__main__":
         maximize_base = (strategy == '2')
         hybrid_approach = (strategy == '3')
         
+        # Add P. Haas stats check for option 2
+        if maximize_base:
+            player_name = "P. Haas"
+            avg_base = calculate_average_base(player_name, consolidated_data)
+            latest_round = consolidated_data['Round'].max()
+            latest_data = consolidated_data[
+                (consolidated_data['Round'] == latest_round) & 
+                (consolidated_data['Player'] == player_name)
+            ]
+            if not latest_data.empty:
+                current_base = latest_data.iloc[0]['Total base']
+                print(f"\n{player_name}'s stats:")
+                print(f"Current base: {current_base:.1f}")
+                print(f"Average base over last 3 rounds: {avg_base:.1f}\n")
+        
         # Example: Trading out Hughes and Grant
         traded_players = ["J. Hughes", "H. Grant"]
         
         print(f"\nCalculating trade options for trading out: {', '.join(traded_players)}")
-        print(f"Strategy: {'Maximizing base stats' if maximize_base else 'Maximizing value (BPRE)' if hybrid_approach else 'Hybrid approach (BPRE + Base stats)'}")
+        print(f"Strategy: {'Maximizing base stats' if maximize_base else 'Maximizing value (BPRE)' if not hybrid_approach else 'Hybrid approach (BPRE + Base stats)'}")
+        
+        # Get latest round data for displaying top players
+        if maximize_base:
+            latest_round = consolidated_data['Round'].max()
+            current_round_data = consolidated_data[consolidated_data['Round'] == latest_round].copy()
+            print_players_by_rule_level(current_round_data, consolidated_data, maximize_base=True)
         
         options = calculate_trade_options(
             consolidated_data,
