@@ -347,54 +347,68 @@ def calculate_trade_options(
         )
 
         valid_combinations = []
-        # For each affordable player with highest average base
-        for _, first_player in available_players[available_players['Price'] <= salary_freed].iterrows():
+        used_players = set()  # Track used players
+
+        # Keep trying combinations until we have enough or run out of players
+        while len(valid_combinations) < max_options:
+            # Get the highest average base player that hasn't been used and is affordable
+            available_first = available_players[
+                (~available_players['Player'].isin(used_players)) & 
+                (available_players['Price'] <= salary_freed)
+            ]
+            
+            if available_first.empty:
+                break
+                
+            first_player = available_first.iloc[0]
             remaining_salary = salary_freed - first_player['Price']
             
-            # Find second player options with highest average base within remaining salary
-            remaining_players = available_players[
+            # Find second player options
+            available_second = available_players[
+                (~available_players['Player'].isin(used_players)) & 
                 (available_players['Price'] <= remaining_salary) & 
                 (available_players.index != first_player.name)
             ]
             
-            for _, second_player in remaining_players.iterrows():
-                valid_combinations.append({
-                    'players': [
-                        {
-                            'name': first_player['Player'],
-                            'position': first_player['POS'],
-                            'price': first_player['Price'],
-                            'total_base': first_player['Total base'],
-                            'base_premium': first_player['Base exceeds price premium'],
-                            'consecutive_good_weeks': first_player['consecutive_good_weeks'],
-                            'avg_base': first_player['avg_base']
-                        },
-                        {
-                            'name': second_player['Player'],
-                            'position': second_player['POS'],
-                            'price': second_player['Price'],
-                            'total_base': second_player['Total base'],
-                            'base_premium': second_player['Base exceeds price premium'],
-                            'consecutive_good_weeks': second_player['consecutive_good_weeks'],
-                            'avg_base': second_player['avg_base']
-                        }
-                    ],
-                    'total_price': first_player['Price'] + second_player['Price'],
-                    'total_base': first_player['Total base'] + second_player['Total base'],
-                    'total_base_premium': first_player['Base exceeds price premium'] + second_player['Base exceeds price premium'],
-                    'salary_remaining': salary_freed - (first_player['Price'] + second_player['Price']),
-                    'total_avg_base': first_player['avg_base'] + second_player['avg_base']
-                })
+            if available_second.empty:
+                used_players.add(first_player['Player'])
+                continue
                 
-                if len(valid_combinations) >= max_options:
-                    break
+            second_player = available_second.iloc[0]
             
-            if len(valid_combinations) >= max_options:
-                break
+            valid_combinations.append({
+                'players': [
+                    {
+                        'name': first_player['Player'],
+                        'position': first_player['POS'],
+                        'price': first_player['Price'],
+                        'total_base': first_player['Total base'],
+                        'base_premium': first_player['Base exceeds price premium'],
+                        'consecutive_good_weeks': first_player['consecutive_good_weeks'],
+                        'avg_base': first_player['avg_base']
+                    },
+                    {
+                        'name': second_player['Player'],
+                        'position': second_player['POS'],
+                        'price': second_player['Price'],
+                        'total_base': second_player['Total base'],
+                        'base_premium': second_player['Base exceeds price premium'],
+                        'consecutive_good_weeks': second_player['consecutive_good_weeks'],
+                        'avg_base': second_player['avg_base']
+                    }
+                ],
+                'total_price': first_player['Price'] + second_player['Price'],
+                'total_base': first_player['Total base'] + second_player['Total base'],
+                'total_base_premium': first_player['Base exceeds price premium'] + second_player['Base exceeds price premium'],
+                'salary_remaining': salary_freed - (first_player['Price'] + second_player['Price']),
+                'total_avg_base': first_player['avg_base'] + second_player['avg_base']
+            })
+            
+            # Add both players to used set
+            used_players.add(first_player['Player'])
+            used_players.add(second_player['Player'])
 
-        # Sort combinations by total average base
-        valid_combinations.sort(key=lambda x: x['total_avg_base'], reverse=True)
-        return valid_combinations[:max_options]
+        return valid_combinations
     else:
         # Original BPRE-based logic
         # Modify sorting based on strategy
@@ -617,15 +631,25 @@ if __name__ == "__main__":
         if options:
             print("\n=== Recommended Trade Combinations ===\n")
             for i, option in enumerate(options, 1):
-                print(f"\nOption {i}" + (f" (Priority Level {option['priority_level']})" if not maximize_base else ""))
-                print("Players to trade in:") 
+                print(f"\nOption {i}")
+                print("Players to trade in:")
                 for player in option['players']:
-                    print(f"- {player['name']} ({player['position']})")
-                    print(f"  Price: ${player['price']:,}")
-                    print(f"  Current Base Premium: {player['base_premium']}")
-                    print(f"  Consecutive Weeks above threshold: {player['consecutive_good_weeks']}")
+                    if maximize_base:
+                        print(f"- {player['name']} ({player['position']})")
+                        print(f"  Price: ${player['price']:,}")
+                        print(f"  Current Base: {player['total_base']}")
+                        print(f"  Average Base: {player['avg_base']:.1f}")
+                    else:
+                        print(f"- {player['name']} ({player['position']})")
+                        print(f"  Price: ${player['price']:,}")
+                        print(f"  Current Base Premium: {player['base_premium']}")
+                        print(f"  Consecutive Weeks above threshold: {player['consecutive_good_weeks']}")
+                
                 print(f"Total Price: ${option['total_price']:,}")
-                print(f"Combined Base Premium: {option['total_base_premium']}")
+                if maximize_base:
+                    print(f"Combined Average Base: {option['total_avg_base']:.1f}")
+                else:
+                    print(f"Combined Base Premium: {option['total_base_premium']}")
                 print(f"Salary Remaining: ${option['salary_remaining']:,}")
             
     except FileNotFoundError:
