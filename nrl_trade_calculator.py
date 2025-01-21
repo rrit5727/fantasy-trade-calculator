@@ -293,7 +293,8 @@ def calculate_trade_options(
     traded_out_players: List[str],
     maximize_base: bool = False,
     hybrid_approach: bool = False,
-    max_options: int = 10
+    max_options: int = 10,
+    allowed_positions: List[str] = None
 ) -> List[Dict]:
     """
     Calculate possible trade combinations based on consolidated data and prioritized rules.
@@ -343,6 +344,12 @@ def calculate_trade_options(
 
     # Now calculate priority levels
     available_players['priority_level'] = available_players.apply(assign_priority_level, axis=1)
+
+    # Filter available players by position if specified
+    if allowed_positions:
+        available_players = available_players[available_players['POS'].isin(allowed_positions)]
+        if available_players.empty:
+            raise ValueError(f"No players found for positions: {', '.join(allowed_positions)}")
 
     if hybrid_approach:
         # First get the best player based on BPRE rules
@@ -686,7 +693,7 @@ if __name__ == "__main__":
         consolidated_data = load_data(file_path)
         print(f"Successfully loaded data for {consolidated_data['Round'].nunique()} rounds")
         
-        # Get user preference for optimization strategy
+        # Get user preference for optimization strategy first
         while True:
             strategy = input("\nDo you want to:\n1. Maximize value (BPRE)\n2. Maximize base stats\n3. Hybrid approach (BPRE + Base stats)\nEnter 1, 2, or 3: ")
             if strategy in ['1', '2', '3']:
@@ -695,7 +702,35 @@ if __name__ == "__main__":
 
         maximize_base = (strategy == '2')
         hybrid_approach = (strategy == '3')
-        
+
+        # Then get position preferences
+        valid_positions = ['HOK', 'HLF', 'CTR', 'WFB', 'EDG', 'MID']
+        while True:
+            print("\nSelect positions to consider:")
+            print("0. All positions")
+            for i, pos in enumerate(valid_positions, 1):
+                print(f"{i}. {pos}")
+            
+            try:
+                pos1 = int(input("\nSelect first position (0-6): "))
+                if pos1 < 0 or pos1 > 6:
+                    raise ValueError
+                
+                if pos1 == 0:
+                    allowed_positions = None
+                    break
+                
+                pos2 = int(input("Select second position (1-6, or same as first position): "))
+                if pos2 < 1 or pos2 > 6:
+                    raise ValueError
+                
+                allowed_positions = [valid_positions[pos1-1]]
+                if pos1 != pos2:
+                    allowed_positions.append(valid_positions[pos2-1])
+                break
+            except ValueError:
+                print("Invalid input. Please enter valid numbers.")
+
         # Add P. Haas stats check for option 2
         if maximize_base:
             player_name = "P. Haas"
@@ -716,19 +751,18 @@ if __name__ == "__main__":
         
         print(f"\nCalculating trade options for trading out: {', '.join(traded_players)}")
         print(f"Strategy: {'Maximizing base stats' if maximize_base else 'Maximizing value (BPRE)' if not hybrid_approach else 'Hybrid approach (BPRE + Base stats)'}")
-        
-        # Get latest round data for displaying top players
-        if maximize_base:
-            latest_round = consolidated_data['Round'].max()
-            current_round_data = consolidated_data[consolidated_data['Round'] == latest_round].copy()
-            print_players_by_rule_level(current_round_data, consolidated_data, maximize_base=True)
+        if allowed_positions:
+            print(f"Considering only positions: {', '.join(allowed_positions)}")
+        else:
+            print("Considering all positions")
         
         options = calculate_trade_options(
             consolidated_data,
             traded_players,
             maximize_base=maximize_base,
             hybrid_approach=hybrid_approach,
-            max_options=10
+            max_options=10,
+            allowed_positions=allowed_positions
         )
         
         if options:
