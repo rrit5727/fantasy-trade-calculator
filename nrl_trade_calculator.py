@@ -180,10 +180,50 @@ def calculate_average_bpre(
         return 0.0
     return recent_data['Base exceeds price premium'].mean()
 
-def print_players_by_rule_level(available_players: pd.DataFrame, consolidated_data: pd.DataFrame) -> None:
+def calculate_average_base(
+    player_name: str,
+    consolidated_data: pd.DataFrame,
+    lookback_weeks: int = 3
+) -> float:
+    """
+    Calculate average Total base for a player over their recent weeks.
+    """
+    player_data = consolidated_data[consolidated_data['Player'] == player_name].sort_values('Round', ascending=False)
+    recent_data = player_data.head(lookback_weeks)
+    if recent_data.empty:
+        return 0.0
+    return recent_data['Total base'].mean()
+
+def print_players_by_rule_level(available_players: pd.DataFrame, consolidated_data: pd.DataFrame, maximize_base: bool = False) -> None:
     """
     Print players that satisfy each rule level, with their relevant stats.
+    If maximize_base is True, print top players by average base instead.
     """
+    if maximize_base:
+        print("\n=== Top Players by Average Base Stats ===\n")
+        print("-" * 80)
+        
+        # Calculate average base for display
+        available_players = available_players.copy()
+        available_players['avg_base'] = available_players['Player'].apply(
+            lambda x: calculate_average_base(x, consolidated_data)
+        )
+        
+        # Sort and display top players
+        top_players = available_players.nlargest(10, 'avg_base')
+        for _, player in top_players.iterrows():
+            print(
+                f"Player: {player['Player']:<20} "
+                f"Position: {player['POS']:<5} "
+                f"Age: {player['Age']:<3} "
+                f"Current Base: {player['Total base']:>5.1f} "
+                f"Avg Base: {player['avg_base']:>5.1f} "
+                f"Price: ${player['Price']:,}"
+            )
+        return
+
+    # Original rule-based output
+    print("\n=== Players Satisfying Each Rule Level ===\n")
     rule_descriptions = {
         1: "BPRE > 8 for 3 weeks - immediate buy",
         2: "BPRE > 13 for 2 consecutive weeks - immediate buy",
@@ -202,8 +242,6 @@ def print_players_by_rule_level(available_players: pd.DataFrame, consolidated_da
         15: "Otherwise rank player that has highest BPRE for most recent week"
     }
 
-    print("\n=== Players Satisfying Each Rule Level ===\n")
-    
     for level in range(1, 15):
         level_players = available_players[available_players['priority_level'] == level]
         
@@ -238,10 +276,12 @@ def print_players_by_rule_level(available_players: pd.DataFrame, consolidated_da
 def calculate_trade_options(
     consolidated_data: pd.DataFrame,
     traded_out_players: List[str],
+    maximize_base: bool = False,
     max_options: int = 10
 ) -> List[Dict]:
     """
     Calculate possible trade combinations based on consolidated data and prioritized rules.
+    If maximize_base is True, prioritize players with highest base stats instead of BPRE.
     """
     latest_round = consolidated_data['Round'].max()
     current_round_data = consolidated_data[consolidated_data['Round'] == latest_round].copy()
@@ -290,178 +330,258 @@ def calculate_trade_options(
     available_players['avg_bpre'] = available_players['Player'].apply(
         lambda x: calculate_average_bpre(x, consolidated_data)
     )
-    
-    # Sort players by priority level, then by average BPRE within each level
-    available_players = available_players.sort_values(
-        by=['priority_level', 'avg_bpre', 'Base exceeds price premium'],
-        ascending=[True, False, False]
+
+    # Calculate average base for each player
+    available_players['avg_base'] = available_players['Player'].apply(
+        lambda x: calculate_average_base(x, consolidated_data)
     )
-    
-    # Print players by rule level with the consolidated_data parameter
-    print_players_by_rule_level(available_players, consolidated_data)
-    
-    valid_combinations = []
-    used_players = set()
-    all_valid_positions = ['HOK', 'HLF', 'CTR', 'WFB', 'EDG', 'MID']
-    pos_combinations = list(combinations(all_valid_positions, num_players_needed))
-    
-    # Group players by priority level and calculate average BPRE
-    priority_groups = {}
-    for _, player in available_players.iterrows():
-        level = player['priority_level']
-        if level not in priority_groups:
-            priority_groups[level] = []
-        
-        avg_bpre = calculate_average_bpre(player['Player'], consolidated_data)
-        player_dict = player.to_dict()
-        player_dict['avg_bpre'] = avg_bpre
-        priority_groups[level].append(player_dict)
-    
-    # Sort players within each priority group by average BPRE
-    for level in priority_groups:
-        priority_groups[level].sort(key=lambda x: x['avg_bpre'], reverse=True)
-    
-    # First try combinations within the same priority level
-    for priority_level in sorted(priority_groups.keys()):
-        if not priority_groups[priority_level]:
-            continue
+
+    if maximize_base:
+        # Sort players by average base
+        available_players['avg_base'] = available_players['Player'].apply(
+            lambda x: calculate_average_base(x, consolidated_data)
+        )
+        available_players = available_players.sort_values(
+            by=['avg_base', 'Total base'],
+            ascending=[False, False]
+        )
+
+        valid_combinations = []
+        # For each affordable player with highest average base
+        for _, first_player in available_players[available_players['Price'] <= salary_freed].iterrows():
+            remaining_salary = salary_freed - first_player['Price']
             
-        # Get all valid combinations for this priority level
-        all_level_combinations = []
-        current_level_players = [p for p in priority_groups[priority_level] 
-                               if p['Player'] not in used_players]
-        
-        if len(current_level_players) >= num_players_needed:
-            current_players_df = pd.DataFrame(current_level_players)
-            
-            for pos_combo in pos_combinations:
-                eligible_players = current_players_df[current_players_df['POS'].isin(pos_combo)]
-                
-                for players in combinations(eligible_players.to_dict('records'), num_players_needed):
-                    if any(p['Player'] in used_players for p in players):
-                        continue
-                        
-                    total_price = sum(p['Price'] for p in players)
-                    if total_price <= salary_freed:
-                        combo_avg_bpre = sum(p['avg_bpre'] for p in players)
-                        all_level_combinations.append({
-                            'priority_level': priority_level,
-                            'players': players,
-                            'total_price': total_price,
-                            'combo_avg_bpre': combo_avg_bpre,
-                            'total_base_premium': sum(p['Base exceeds price premium'] for p in players)
-                        })
-        
-        # Sort combinations by average BPRE
-        all_level_combinations.sort(key=lambda x: x['combo_avg_bpre'], reverse=True)
-        
-        # Add combinations to valid_combinations and update used_players
-        for combo in all_level_combinations:
-            # Skip if any player in this combination has been used
-            if any(p['Player'] in used_players for p in combo['players']):
-                continue
-                
-            valid_combinations.append({
-                'priority_level': combo['priority_level'],
-                'players': [
-                    {
-                        'name': p['Player'],
-                        'position': p['POS'],
-                        'price': p['Price'],
-                        'total_base': p['Total base'],
-                        'base_premium': p['Base exceeds price premium'],
-                        'consecutive_good_weeks': p['consecutive_good_weeks'],
-                        'priority_level': p['priority_level']
-                    } for p in combo['players']
-                ],
-                'total_price': combo['total_price'],
-                'total_base': sum(p['Total base'] for p in combo['players']),
-                'total_base_premium': combo['total_base_premium'],
-                'salary_remaining': salary_freed - combo['total_price'],
-                'combo_avg_bpre': combo['combo_avg_bpre']
-            })
-            
-            # Immediately update used_players after adding a combination
-            for player in combo['players']:
-                used_players.add(player['Player'])
-            
-            if len(valid_combinations) >= max_options:
-                break
-        
-        if len(valid_combinations) >= max_options:
-            break
-    
-    # If we still need more combinations, try mixing priority levels
-    if len(valid_combinations) < max_options:
-        for priority_level in sorted(priority_groups.keys()):
-            current_and_higher_priority_players = []
-            # Include all players of current priority level and higher
-            for level in sorted(priority_groups.keys()):
-                if level <= priority_level:
-                    current_and_higher_priority_players.extend(priority_groups[level])
-            
-            # Filter out already used players
-            current_and_higher_priority_players = [
-                p for p in current_and_higher_priority_players 
-                if p['Player'] not in used_players
+            # Find second player options with highest average base within remaining salary
+            remaining_players = available_players[
+                (available_players['Price'] <= remaining_salary) & 
+                (available_players.index != first_player.name)
             ]
             
-            if not current_and_higher_priority_players:
-                continue
-                
-            current_players_df = pd.DataFrame(current_and_higher_priority_players)
-            
-            for pos_combo in pos_combinations:
-                eligible_players = current_players_df[current_players_df['POS'].isin(pos_combo)]
-                
-                for players in combinations(eligible_players.to_dict('records'), num_players_needed):
-                    if any(p['Player'] in used_players for p in players):
-                        continue
-                        
-                    total_price = sum(p['Price'] for p in players)
-                    if total_price <= salary_freed:
-                        combo_avg_bpre = sum(p['avg_bpre'] for p in players)
-                        combo_priority = max(p['priority_level'] for p in players)
-                        valid_combinations.append({
-                            'priority_level': combo_priority,
-                            'players': [
-                                {
-                                    'name': p['Player'],
-                                    'position': p['POS'],
-                                    'price': p['Price'],
-                                    'total_base': p['Total base'],
-                                    'base_premium': p['Base exceeds price premium'],
-                                    'consecutive_good_weeks': p['consecutive_good_weeks'],
-                                    'priority_level': p['priority_level']
-                                } for p in players
-                            ],
-                            'total_price': total_price,
-                            'total_base': sum(p['Total base'] for p in players),
-                            'total_base_premium': sum(p['Base exceeds price premium'] for p in players),
-                            'salary_remaining': salary_freed - total_price,
-                            'combo_avg_bpre': combo_avg_bpre
-                        })
-                        
-                        for p in players:
-                            used_players.add(p['Player'])
-                        
-                        if len(valid_combinations) >= max_options:
-                            break
+            for _, second_player in remaining_players.iterrows():
+                valid_combinations.append({
+                    'players': [
+                        {
+                            'name': first_player['Player'],
+                            'position': first_player['POS'],
+                            'price': first_player['Price'],
+                            'total_base': first_player['Total base'],
+                            'base_premium': first_player['Base exceeds price premium'],
+                            'consecutive_good_weeks': first_player['consecutive_good_weeks'],
+                            'avg_base': first_player['avg_base']
+                        },
+                        {
+                            'name': second_player['Player'],
+                            'position': second_player['POS'],
+                            'price': second_player['Price'],
+                            'total_base': second_player['Total base'],
+                            'base_premium': second_player['Base exceeds price premium'],
+                            'consecutive_good_weeks': second_player['consecutive_good_weeks'],
+                            'avg_base': second_player['avg_base']
+                        }
+                    ],
+                    'total_price': first_player['Price'] + second_player['Price'],
+                    'total_base': first_player['Total base'] + second_player['Total base'],
+                    'total_base_premium': first_player['Base exceeds price premium'] + second_player['Base exceeds price premium'],
+                    'salary_remaining': salary_freed - (first_player['Price'] + second_player['Price']),
+                    'total_avg_base': first_player['avg_base'] + second_player['avg_base']
+                })
                 
                 if len(valid_combinations) >= max_options:
                     break
             
             if len(valid_combinations) >= max_options:
                 break
-    
-    # Sort combinations by priority level first, then by average BPRE
-    valid_combinations.sort(key=lambda x: (
-        x['priority_level'], 
-        -x['combo_avg_bpre'],
-        -x['total_base_premium']
-    ))
-    
-    return valid_combinations[:max_options]
+
+        # Sort combinations by total average base
+        valid_combinations.sort(key=lambda x: x['total_avg_base'], reverse=True)
+        return valid_combinations[:max_options]
+    else:
+        # Original BPRE-based logic
+        # Modify sorting based on strategy
+        if maximize_base:
+            available_players = available_players.sort_values(
+                by=['avg_base', 'Total base'],
+                ascending=[False, False]
+            )
+        else:
+            # Keep existing BPRE-based sorting
+            available_players = available_players.sort_values(
+                by=['priority_level', 'avg_bpre', 'Base exceeds price premium'],
+                ascending=[True, False, False]
+            )
+        
+        # Print players by rule level with the consolidated_data parameter
+        print_players_by_rule_level(available_players, consolidated_data, maximize_base)
+        
+        valid_combinations = []
+        used_players = set()
+        all_valid_positions = ['HOK', 'HLF', 'CTR', 'WFB', 'EDG', 'MID']
+        pos_combinations = list(combinations(all_valid_positions, num_players_needed))
+        
+        # Group players by priority level and calculate average BPRE
+        priority_groups = {}
+        for _, player in available_players.iterrows():
+            level = player['priority_level']
+            if level not in priority_groups:
+                priority_groups[level] = []
+            
+            avg_bpre = calculate_average_bpre(player['Player'], consolidated_data)
+            player_dict = player.to_dict()
+            player_dict['avg_bpre'] = avg_bpre
+            priority_groups[level].append(player_dict)
+        
+        # Sort players within each priority group by average BPRE
+        for level in priority_groups:
+            priority_groups[level].sort(key=lambda x: x['avg_bpre'], reverse=True)
+        
+        # First try combinations within the same priority level
+        for priority_level in sorted(priority_groups.keys()):
+            if not priority_groups[priority_level]:
+                continue
+                
+            # Get all valid combinations for this priority level
+            all_level_combinations = []
+            current_level_players = [p for p in priority_groups[priority_level] 
+                                   if p['Player'] not in used_players]
+            
+            if len(current_level_players) >= num_players_needed:
+                current_players_df = pd.DataFrame(current_level_players)
+                
+                for pos_combo in pos_combinations:
+                    eligible_players = current_players_df[current_players_df['POS'].isin(pos_combo)]
+                    
+                    for players in combinations(eligible_players.to_dict('records'), num_players_needed):
+                        if any(p['Player'] in used_players for p in players):
+                            continue
+                            
+                        total_price = sum(p['Price'] for p in players)
+                        if total_price <= salary_freed:
+                            combo_avg_bpre = sum(p['avg_bpre'] for p in players)
+                            all_level_combinations.append({
+                                'priority_level': priority_level,
+                                'players': players,
+                                'total_price': total_price,
+                                'combo_avg_bpre': combo_avg_bpre,
+                                'total_base_premium': sum(p['Base exceeds price premium'] for p in players)
+                            })
+            
+            # Sort combinations by average BPRE
+            all_level_combinations.sort(key=lambda x: x['combo_avg_bpre'], reverse=True)
+            
+            # Add combinations to valid_combinations and update used_players
+            for combo in all_level_combinations:
+                # Skip if any player in this combination has been used
+                if any(p['Player'] in used_players for p in combo['players']):
+                    continue
+                    
+                valid_combinations.append({
+                    'priority_level': combo['priority_level'],
+                    'players': [
+                        {
+                            'name': p['Player'],
+                            'position': p['POS'],
+                            'price': p['Price'],
+                            'total_base': p['Total base'],
+                            'base_premium': p['Base exceeds price premium'],
+                            'consecutive_good_weeks': p['consecutive_good_weeks'],
+                            'priority_level': p['priority_level']
+                        } for p in combo['players']
+                    ],
+                    'total_price': combo['total_price'],
+                    'total_base': sum(p['Total base'] for p in combo['players']),
+                    'total_base_premium': combo['total_base_premium'],
+                    'salary_remaining': salary_freed - combo['total_price'],
+                    'combo_avg_bpre': combo['combo_avg_bpre']
+                })
+                
+                # Immediately update used_players after adding a combination
+                for player in combo['players']:
+                    used_players.add(player['Player'])
+                    
+                if len(valid_combinations) >= max_options:
+                    break
+            
+            if len(valid_combinations) >= max_options:
+                break
+        
+        # If we still need more combinations, try mixing priority levels
+        if len(valid_combinations) < max_options:
+            for priority_level in sorted(priority_groups.keys()):
+                current_and_higher_priority_players = []
+                # Include all players of current priority level and higher
+                for level in sorted(priority_groups.keys()):
+                    if level <= priority_level:
+                        current_and_higher_priority_players.extend(priority_groups[level])
+                
+                # Filter out already used players
+                current_and_higher_priority_players = [
+                    p for p in current_and_higher_priority_players 
+                    if p['Player'] not in used_players
+                ]
+                
+                if not current_and_higher_priority_players:
+                    continue
+                    
+                current_players_df = pd.DataFrame(current_and_higher_priority_players)
+                
+                for pos_combo in pos_combinations:
+                    eligible_players = current_players_df[current_players_df['POS'].isin(pos_combo)]
+                    
+                    for players in combinations(eligible_players.to_dict('records'), num_players_needed):
+                        if any(p['Player'] in used_players for p in players):
+                            continue
+                            
+                        total_price = sum(p['Price'] for p in players)
+                        if total_price <= salary_freed:
+                            combo_avg_bpre = sum(p['avg_bpre'] for p in players)
+                            combo_priority = max(p['priority_level'] for p in players)
+                            valid_combinations.append({
+                                'priority_level': combo_priority,
+                                'players': [
+                                    {
+                                        'name': p['Player'],
+                                        'position': p['POS'],
+                                        'price': p['Price'],
+                                        'total_base': p['Total base'],
+                                        'base_premium': p['Base exceeds price premium'],
+                                        'consecutive_good_weeks': p['consecutive_good_weeks'],
+                                        'priority_level': p['priority_level']
+                                    } for p in players
+                                ],
+                                'total_price': total_price,
+                                'total_base': sum(p['Total base'] for p in players),
+                                'total_base_premium': sum(p['Base exceeds price premium'] for p in players),
+                                'salary_remaining': salary_freed - total_price,
+                                'combo_avg_bpre': combo_avg_bpre
+                            })
+                            
+                            for p in players:
+                                used_players.add(p['Player'])
+                            
+                            if len(valid_combinations) >= max_options:
+                                break
+                
+                    if len(valid_combinations) >= max_options:
+                        break
+                
+                if len(valid_combinations) >= max_options:
+                    break
+        
+        # Modify the sorting of valid_combinations based on strategy
+        if maximize_base:
+            valid_combinations.sort(key=lambda x: (
+                sum(calculate_average_base(p['name'], consolidated_data) for p in x['players']),
+                -x['total_base']
+            ))
+        else:
+            # Keep existing BPRE-based sorting
+            valid_combinations.sort(key=lambda x: (
+                x['priority_level'], 
+                -x['combo_avg_bpre'],
+                -x['total_base_premium']
+            ))
+        
+        return valid_combinations[:max_options]
 
 if __name__ == "__main__":
     try:
@@ -472,21 +592,32 @@ if __name__ == "__main__":
         consolidated_data = load_data(file_path)
         print(f"Successfully loaded data for {consolidated_data['Round'].nunique()} rounds")
         
+        # Get user preference for optimization strategy
+        while True:
+            strategy = input("\nDo you want to:\n1. Maximize value (BPRE)\n2. Maximize base stats\nEnter 1 or 2: ")
+            if strategy in ['1', '2']:
+                break
+            print("Invalid input. Please enter 1 or 2.")
+        
+        maximize_base = (strategy == '2')
+        
         # Example: Trading out Hughes and Grant
         traded_players = ["J. Hughes", "H. Grant"]
         
         print(f"\nCalculating trade options for trading out: {', '.join(traded_players)}")
+        print(f"Strategy: {'Maximizing base stats' if maximize_base else 'Maximizing value (BPRE)'}")
         
         options = calculate_trade_options(
             consolidated_data,
             traded_players,
+            maximize_base=maximize_base,
             max_options=10
         )
         
         if options:
             print("\n=== Recommended Trade Combinations ===\n")
             for i, option in enumerate(options, 1):
-                print(f"\nOption {i} (Priority Level {option['priority_level']}):")
+                print(f"\nOption {i}" + (f" (Priority Level {option['priority_level']})" if not maximize_base else ""))
                 print("Players to trade in:") 
                 for player in option['players']:
                     print(f"- {player['name']} ({player['position']})")
