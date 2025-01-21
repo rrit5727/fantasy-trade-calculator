@@ -277,6 +277,7 @@ def calculate_trade_options(
     consolidated_data: pd.DataFrame,
     traded_out_players: List[str],
     maximize_base: bool = False,
+    hybrid_approach: bool = False,
     max_options: int = 10
 ) -> List[Dict]:
     """
@@ -336,6 +337,78 @@ def calculate_trade_options(
         lambda x: calculate_average_base(x, consolidated_data)
     )
 
+    if hybrid_approach:
+        # First get the best player based on BPRE rules
+        bpre_sorted = available_players.sort_values(
+            by=['priority_level', 'avg_bpre', 'Base exceeds price premium'],
+            ascending=[True, False, False]
+        )
+        
+        valid_combinations = []
+        used_players = set()
+        
+        # Keep trying combinations until we have enough or run out of players
+        while len(valid_combinations) < max_options:
+            # Get the highest priority player that hasn't been used and is affordable
+            available_first = bpre_sorted[
+                (~bpre_sorted['Player'].isin(used_players)) & 
+                (bpre_sorted['Price'] <= salary_freed)
+            ]
+            
+            if available_first.empty:
+                break
+                
+            first_player = available_first.iloc[0]
+            remaining_salary = salary_freed - first_player['Price']
+            
+            # Sort remaining players by average base for second player
+            base_sorted = available_players[
+                (~available_players['Player'].isin(used_players)) & 
+                (available_players['Price'] <= remaining_salary) & 
+                (available_players.index != first_player.name)
+            ].sort_values(by=['avg_base', 'Total base'], ascending=[False, False])
+            
+            if base_sorted.empty:
+                used_players.add(first_player['Player'])
+                continue
+                
+            second_player = base_sorted.iloc[0]
+            
+            valid_combinations.append({
+                'players': [
+                    {
+                        'name': first_player['Player'],
+                        'position': first_player['POS'],
+                        'price': first_player['Price'],
+                        'total_base': first_player['Total base'],
+                        'base_premium': first_player['Base exceeds price premium'],
+                        'consecutive_good_weeks': first_player['consecutive_good_weeks'],
+                        'priority_level': first_player['priority_level'],
+                        'avg_base': first_player['avg_base']
+                    },
+                    {
+                        'name': second_player['Player'],
+                        'position': second_player['POS'],
+                        'price': second_player['Price'],
+                        'total_base': second_player['Total base'],
+                        'base_premium': second_player['Base exceeds price premium'],
+                        'consecutive_good_weeks': second_player['consecutive_good_weeks'],
+                        'priority_level': second_player['priority_level'],
+                        'avg_base': second_player['avg_base']
+                    }
+                ],
+                'total_price': first_player['Price'] + second_player['Price'],
+                'total_base': first_player['Total base'] + second_player['Total base'],
+                'total_base_premium': first_player['Base exceeds price premium'] + second_player['Base exceeds price premium'],
+                'salary_remaining': salary_freed - (first_player['Price'] + second_player['Price']),
+                'total_avg_base': first_player['avg_base'] + second_player['avg_base']
+            })
+            
+            used_players.add(first_player['Player'])
+            used_players.add(second_player['Player'])
+            
+        return valid_combinations
+    
     if maximize_base:
         # Sort players by average base
         available_players['avg_base'] = available_players['Player'].apply(
@@ -608,23 +681,25 @@ if __name__ == "__main__":
         
         # Get user preference for optimization strategy
         while True:
-            strategy = input("\nDo you want to:\n1. Maximize value (BPRE)\n2. Maximize base stats\nEnter 1 or 2: ")
-            if strategy in ['1', '2']:
+            strategy = input("\nDo you want to:\n1. Maximize value (BPRE)\n2. Maximize base stats\n3. Hybrid approach (BPRE + Base stats)\nEnter 1, 2, or 3: ")
+            if strategy in ['1', '2', '3']:
                 break
-            print("Invalid input. Please enter 1 or 2.")
-        
+            print("Invalid input. Please enter 1, 2, or 3.")
+
         maximize_base = (strategy == '2')
+        hybrid_approach = (strategy == '3')
         
         # Example: Trading out Hughes and Grant
         traded_players = ["J. Hughes", "H. Grant"]
         
         print(f"\nCalculating trade options for trading out: {', '.join(traded_players)}")
-        print(f"Strategy: {'Maximizing base stats' if maximize_base else 'Maximizing value (BPRE)'}")
+        print(f"Strategy: {'Maximizing base stats' if maximize_base else 'Maximizing value (BPRE)' if hybrid_approach else 'Hybrid approach (BPRE + Base stats)'}")
         
         options = calculate_trade_options(
             consolidated_data,
             traded_players,
             maximize_base=maximize_base,
+            hybrid_approach=hybrid_approach,
             max_options=10
         )
         
