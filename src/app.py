@@ -93,5 +93,19 @@ def calculate():
             'error': f'An error occurred while calculating trade options: {str(e)}'
         }), 500
 
+@app.route('/players', methods=['GET'])
+def get_players():
+    try:
+        # Load consolidated data
+        file_path = "NRL_stats.xlsx"
+        consolidated_data = load_data(file_path)
+        
+        # Extract unique player names
+        player_names = consolidated_data['Player'].unique().tolist()
+        
+        return jsonify(player_names)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == "__main__":
     app.run(debug=True)
