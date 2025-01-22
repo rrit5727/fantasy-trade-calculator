@@ -46,24 +46,16 @@ def index():
 @app.route('/calculate', methods=['POST'])
 def calculate():
     try:
-        # Get form data
-        player1 = request.form.get('player1')
-        player2 = request.form.get('player2')
-        strategy = request.form.get('strategy')
-        
-        if not player1 or not player2:
-            return jsonify({
-                'error': 'Please provide both players for trade calculation'
-            }), 400
+        # Get data from the form
+        player1 = request.form['player1']
+        player2 = request.form['player2']
+        strategy = request.form['strategy']
+        trade_type = request.form['tradeType']
+        allowed_positions = request.form.getlist('positions') if trade_type == 'positionalSwap' else []  # Get selected positions only for positional swap
 
         # Load consolidated data
-        try:
-            file_path = "NRL_stats.xlsx"
-            consolidated_data = load_data(file_path)
-        except Exception as e:
-            return jsonify({
-                'error': f'Error loading data file: {str(e)}'
-            }), 500
+        file_path = "NRL_stats.xlsx"
+        consolidated_data = load_data(file_path)
 
         # Determine optimization strategy
         maximize_base = (strategy == '2')
@@ -76,7 +68,8 @@ def calculate():
             maximize_base=maximize_base,
             hybrid_approach=hybrid_approach,
             max_options=10,
-            allowed_positions=None
+            allowed_positions=allowed_positions,  # Pass the allowed positions
+            trade_type=trade_type  # Pass the trade type
         )
 
         # Prepare options for JSON response

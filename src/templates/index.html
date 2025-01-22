@@ -54,6 +54,26 @@
                 <option value="3">Hybrid approach</option>
             </select>
         </div>
+
+        <div class="form-group">
+            <label>Trade Type:</label><br>
+            <input type="radio" id="likeForLike" name="tradeType" value="likeForLike" checked>
+            <label for="likeForLike">Like-for-Like</label><br>
+            <input type="radio" id="positionalSwap" name="tradeType" value="positionalSwap">
+            <label for="positionalSwap">Positional Swap</label>
+        </div>
+
+        <div class="form-group" id="positionSelection" style="display: none;">
+            <label for="positions">Select Positions for Swap:</label>
+            <select id="positions" name="positions" multiple>
+                <option value="HOK">HOK</option>
+                <option value="HLF">HLF</option>
+                <option value="CTR">CTR</option>
+                <option value="WFB">WFB</option>
+                <option value="EDG">EDG</option>
+                <option value="MID">MID</option>
+            </select>
+        </div>
         
         <button type="submit">Calculate Trade Options</button>
     </form>
@@ -74,6 +94,15 @@
                 },
                 error: function(xhr) {
                     console.error('Error fetching player names:', xhr.responseText);
+                }
+            });
+
+            // Show/hide position selection based on trade type
+            $('input[name="tradeType"]').change(function() {
+                if ($(this).val() === 'positionalSwap') {
+                    $('#positionSelection').show();
+                } else {
+                    $('#positionSelection').hide();
                 }
             });
 

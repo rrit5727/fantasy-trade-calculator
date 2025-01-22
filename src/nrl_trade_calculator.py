@@ -294,7 +294,8 @@ def calculate_trade_options(
     maximize_base: bool = False,
     hybrid_approach: bool = False,
     max_options: int = 10,
-    allowed_positions: List[str] = None
+    allowed_positions: List[str] = None,
+    trade_type: str = 'likeForLike'
 ) -> List[Dict]:
     """
     Calculate possible trade combinations based on consolidated data and prioritized rules.
@@ -345,11 +346,45 @@ def calculate_trade_options(
     # Now calculate priority levels
     available_players['priority_level'] = available_players.apply(assign_priority_level, axis=1)
 
-    # Filter available players by position if specified
-    if allowed_positions:
-        available_players = available_players[available_players['POS'].isin(allowed_positions)]
-        if available_players.empty:
-            raise ValueError(f"No players found for positions: {', '.join(allowed_positions)}")
+    # Get the positions of the traded out players
+    traded_out_positions = [consolidated_data[consolidated_data['Player'] == player]['POS'].values[0] for player in traded_out_players]
+
+    if trade_type == 'likeForLike':
+        # Ensure that we only suggest players that match the positions of the traded out players
+        available_players = available_players[available_players['POS'].isin(traded_out_positions)]
+        
+        # Generate combinations of players that match the number of traded out players
+        position_count = {pos: traded_out_positions.count(pos) for pos in set(traded_out_positions)}
+        
+        valid_combinations = []
+        
+        # Create a list of players grouped by position
+        players_by_position = {pos: available_players[available_players['POS'] == pos] for pos in position_count.keys()}
+        
+        # Generate combinations based on the required counts
+        for pos, count in position_count.items():
+            if len(players_by_position[pos]) < count:
+                return []  # Not enough players to match the required count
+            
+            # Get combinations of players for this position
+            position_combinations = list(combinations(players_by_position[pos].to_dict('records'), count))
+            valid_combinations.extend(position_combinations)
+
+        # Now we need to filter valid_combinations to ensure they match the exact number of players
+        final_combinations = []
+        for combo in valid_combinations:
+            if len(combo) == len(traded_out_players):
+                final_combinations.append(combo)
+
+        # Limit to max_options
+        final_combinations = final_combinations[:max_options]
+
+    elif trade_type == 'positionalSwap':
+        # Filter available players based on allowed positions
+        if allowed_positions:
+            available_players = available_players[available_players['POS'].isin(allowed_positions)]
+            if available_players.empty:
+                raise ValueError(f"No players found for positions: {', '.join(allowed_positions)}")
 
     if hybrid_approach:
         # First get the best player based on BPRE rules
