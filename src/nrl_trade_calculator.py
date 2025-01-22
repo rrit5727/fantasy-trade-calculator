@@ -315,7 +315,7 @@ def calculate_trade_options(
         else:
             print(f"Warning: Could not find price data for {player}")
     
-    print(f"Total salary freed up: ${salary_freed:,}")
+    print(f"Total salary freed up: ${ salary_freed:,}")
     
     # Get all players who have played in any of the last 3 rounds
     recent_players_data = consolidated_data[consolidated_data['Round'].isin(last_three_rounds)]
@@ -548,29 +548,27 @@ def calculate_trade_options(
             if len(current_level_players) >= num_players_needed:
                 current_players_df = pd.DataFrame(current_level_players)
                 
-                for pos_combo in pos_combinations:
-                    eligible_players = current_players_df[current_players_df['POS'].isin(pos_combo)]
-                    
-                    for players in combinations(eligible_players.to_dict('records'), num_players_needed):
-                        if any(p['Player'] in used_players for p in players):
-                            continue
-                            
-                        total_price = sum(p['Price'] for p in players)
-                        if total_price <= salary_freed:
-                            combo_avg_bpre = sum(p['avg_bpre'] for p in players)
-                            all_level_combinations.append({
-                                'priority_level': priority_level,
-                                'players': players,
-                                'total_price': total_price,
-                                'combo_avg_bpre': combo_avg_bpre,
-                                'total_base_premium': sum(p['Base exceeds price premium'] for p in players)
-                            })
+                # Generate ALL possible combinations within this priority level
+                for players in combinations(current_players_df.to_dict('records'), num_players_needed):
+                    total_price = sum(p['Price'] for p in players)
+                    if total_price <= salary_freed:
+                        combo_avg_bpre = sum(p['avg_bpre'] for p in players)
+                        all_level_combinations.append({
+                            'priority_level': priority_level,
+                            'players': players,
+                            'total_price': total_price,
+                            'combo_avg_bpre': combo_avg_bpre,
+                            'total_base_premium': sum(p['Base exceeds price premium'] for p in players)
+                        })
             
             # Sort combinations by average BPRE
             all_level_combinations.sort(key=lambda x: x['combo_avg_bpre'], reverse=True)
             
-            # Add combinations to valid_combinations and update used_players
+            # Add ALL valid combinations from this priority level
             for combo in all_level_combinations:
+                if len(valid_combinations) >= max_options:
+                    break
+                    
                 # Skip if any player in this combination has been used
                 if any(p['Player'] in used_players for p in combo['players']):
                     continue
@@ -595,16 +593,10 @@ def calculate_trade_options(
                     'combo_avg_bpre': combo['combo_avg_bpre']
                 })
                 
-                # Immediately update used_players after adding a combination
+                # Update used_players after adding a combination
                 for player in combo['players']:
                     used_players.add(player['Player'])
-                    
-                if len(valid_combinations) >= max_options:
-                    break
-            
-            if len(valid_combinations) >= max_options:
-                break
-        
+
         # If we still need more combinations, try mixing priority levels
         if len(valid_combinations) < max_options:
             for priority_level in sorted(priority_groups.keys()):
@@ -746,8 +738,7 @@ if __name__ == "__main__":
                 print(f"Current base: {current_base:.1f}")
                 print(f"Average base over last 3 rounds: {avg_base:.1f}\n")
         
-        # Example: Trading out Hughes and Grant
-        traded_players = ["J. Hughes", "H. Grant"]
+        
         
         print(f"\nCalculating trade options for trading out: {', '.join(traded_players)}")
         print(f"Strategy: {'Maximizing base stats' if maximize_base else 'Maximizing value (BPRE)' if not hybrid_approach else 'Hybrid approach (BPRE + Base stats)'}")

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NRL Trade Calculator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .results {
+            margin-top: 20px;
+        }
+        .trade-option {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>NRL Trade Calculator</h1>
+    
+    <form id="tradeForm">
+        <div class="form-group">
+            <label for="player1">Player 1 to Trade Out:</label>
+            <input type="text" id="player1" name="player1" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="player2">Player 2 to Trade Out:</label>
+            <input type="text" id="player2" name="player2" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="strategy">Strategy:</label>
+            <select id="strategy" name="strategy">
+                <option value="1">Maximize value (BPRE)</option>
+                <option value="2">Maximize base stats</option>
+                <option value="3">Hybrid approach</option>
+            </select>
+        </div>
+        
+        <button type="submit">Calculate Trade Options</button>
+    </form>
+
+    <div id="results" class="results"></div>
+
+    <script>
+        $('#tradeForm').on('submit', function(e) {
+            e.preventDefault();
+            
+            $('#results').html('Calculating...');
+            
+            $.ajax({
+                url: '/calculate',
+                method: 'POST',
+                data: $(this).serialize(),
+                success: function(options) {
+                    let html = '<h2>Trade Options</h2>';
+                    
+                    options.forEach((option, index) => {
+                        html += `
+                            <div class="trade-option">
+                                <h3>Option ${index + 1}</h3>
+                                <h4>Players to trade in:</h4>
+                                ${option.players.map(player => `
+                                    <div>
+                                        <strong>${player.name}</strong> (${player.position})
+                                        <br>
+                                        Price: $${player.price.toLocaleString()}
+                                        <br>
+                                        Base: ${player.total_base.toFixed(1)}
+                                        <br>
+                                        ${player.avg_base ? `Average Base: ${player.avg_base.toFixed(1)}<br>` : ''}
+                                        ${player.base_premium ? `Base Premium: ${player.base_premium.toFixed(1)}<br>` : ''}
+                                        ${player.consecutive_good_weeks ? `Consecutive Good Weeks: ${player.consecutive_good_weeks}` : ''}
+                                    </div>
+                                `).join('<br>')}
+                                <br>
+                                <div>
+                                    Total Price: $${option.total_price.toLocaleString()}
+                                    <br>
+                                    Salary Remaining: $${option.salary_remaining.toLocaleString()}
+                                    <br>
+                                    ${option.total_avg_base ? `Combined Average Base: ${option.total_avg_base.toFixed(1)}` : ''}
+                                    ${option.combo_avg_bpre ? `<br>Combined Base Premium: ${option.combo_avg_bpre.toFixed(1)}` : ''}
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    $('#results').html(html);
+                },
+                error: function(xhr) {
+                    let errorMessage = 'An error occurred while calculating trade options.';
+                    if (xhr.responseJSON && xhr.responseJSON.error) {
+                        errorMessage = xhr.responseJSON.error;
+                    }
+                    $('#results').html(`<div class="error">${errorMessage}</div>`);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
