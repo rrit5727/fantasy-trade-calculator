@@ -84,7 +84,12 @@ def check_rule_condition(
 ) -> bool:
     """
     Check if a player meets the specified rule conditions.
+    Exclude Mid/EDG players who are 29 years or older.
     """
+    # Exclude Mid/EDG players who are 29 years or older
+    if player_data['POS'] in ['MID', 'EDG'] and player_data['Age'] >= 29:
+        return False
+    
     # Check base premium threshold for current week
     meets_bpre = player_data['Base exceeds price premium'] >= base_premium_threshold
     
@@ -193,8 +198,15 @@ def calculate_average_bpre(
     """
     Calculate average BPRE for a player over their recent weeks.
     Only calculate the average if the player has played in at least `lookback_weeks` rounds.
+    Exclude Mid/EDG players who are 29 years or older.
     """
     player_data = consolidated_data[consolidated_data['Player'] == player_name].sort_values('Round', ascending=False)
+    
+    # Exclude Mid/EDG players who are 29 years or older
+    if not player_data.empty:
+        if player_data.iloc[0]['POS'] in ['MID', 'EDG'] and player_data.iloc[0]['Age'] >= 29:
+            return 0.0  # Exclude these players
+    
     recent_data = player_data.head(lookback_weeks)
     
     # Only calculate the average if the player has played in at least `lookback_weeks` rounds
