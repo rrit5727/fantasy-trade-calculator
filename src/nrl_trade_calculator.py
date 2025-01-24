@@ -192,11 +192,15 @@ def calculate_average_bpre(
 ) -> float:
     """
     Calculate average BPRE for a player over their recent weeks.
+    Only calculate the average if the player has played in at least `lookback_weeks` rounds.
     """
     player_data = consolidated_data[consolidated_data['Player'] == player_name].sort_values('Round', ascending=False)
     recent_data = player_data.head(lookback_weeks)
-    if recent_data.empty:
-        return 0.0
+    
+    # Only calculate the average if the player has played in at least `lookback_weeks` rounds
+    if len(recent_data) < lookback_weeks:
+        return 0.0  # Return 0 if the player hasn't played enough rounds
+    
     return int(recent_data['Base exceeds price premium'].mean())
 
 def calculate_average_base(
@@ -206,11 +210,15 @@ def calculate_average_base(
 ) -> float:
     """
     Calculate average Total base for a player over their recent weeks.
+    Only calculate the average if the player has played in at least `lookback_weeks` rounds.
     """
     player_data = consolidated_data[consolidated_data['Player'] == player_name].sort_values('Round', ascending=False)
     recent_data = player_data.head(lookback_weeks)
-    if recent_data.empty:
-        return 0.0
+    
+    # Only calculate the average if the player has played in at least `lookback_weeks` rounds
+    if len(recent_data) < lookback_weeks:
+        return 0.0  # Return 0 if the player hasn't played enough rounds
+    
     return int(recent_data['Total base'].mean())
 
 def print_players_by_rule_level(available_players: pd.DataFrame, consolidated_data: pd.DataFrame, maximize_base: bool = False) -> None:
