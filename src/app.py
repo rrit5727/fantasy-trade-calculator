@@ -26,7 +26,7 @@ def prepare_trade_option(option: Dict[str, Any]) -> Dict[str, Any]:
             'position': player.get('position', ''),
             'price': int(player.get('price', 0)),
             'total_base': float(player.get('total_base', 0)),
-            'base_premium': float(player.get('base_premium', 0)),
+            'base_premium': int(float(player.get('base_premium', 0))),
             'consecutive_good_weeks': int(player.get('consecutive_good_weeks', 0)),
             'avg_base': float(player.get('avg_base', 0)) if 'avg_base' in player else 0.0
         }

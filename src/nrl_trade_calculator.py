@@ -76,6 +76,7 @@ def check_consistent_performance(
 
 def check_rule_condition(
     player_data: pd.Series,
+    consolidated_data: pd.DataFrame,
     base_premium_threshold: int,
     weeks_threshold: int,
     position_requirement: str = None,
@@ -88,7 +89,21 @@ def check_rule_condition(
     meets_bpre = player_data['Base exceeds price premium'] >= base_premium_threshold
     
     # Check consecutive weeks requirement
-    meets_weeks = True if weeks_threshold <= 1 else player_data['consecutive_good_weeks'] >= weeks_threshold
+    player_name = player_data['Player']
+    player_history = consolidated_data[consolidated_data['Player'] == player_name].sort_values('Round')
+    
+    # Check if the player has met the threshold for the required consecutive weeks
+    current_streak = 0
+    for _, row in player_history.iterrows():
+        if row['Base exceeds price premium'] >= base_premium_threshold:
+            current_streak += 1
+        else:
+            current_streak = 0
+        
+        if current_streak >= weeks_threshold:
+            break
+    
+    meets_weeks = current_streak >= weeks_threshold
     
     if position_requirement:
         positions = position_requirement.split('|')
@@ -108,11 +123,11 @@ def assign_priority_level(player_data: pd.Series, consolidated_data: pd.DataFram
     Assign priority level based on the updated rules.
     """
     # Rule 1: BPRE >= 30 for 2 consecutive weeks
-    if check_rule_condition(player_data, 30, 2):
+    if check_rule_condition(player_data, consolidated_data, 30, 2):
         return 1
         
     # Rule 2: BPRE >= 20 for 3 consecutive weeks
-    if check_rule_condition(player_data, 20, 3):
+    if check_rule_condition(player_data, consolidated_data, 20, 3):
         return 2
         
     # Rule 3: 3-week average BPRE >= 20
@@ -120,11 +135,11 @@ def assign_priority_level(player_data: pd.Series, consolidated_data: pd.DataFram
         return 3
         
     # Rule 4: BPRE >= 25 for 2 consecutive weeks
-    if check_rule_condition(player_data, 25, 2):
+    if check_rule_condition(player_data, consolidated_data, 25, 2):
         return 4
         
     # Rule 5: BPRE >= 15 for 3 consecutive weeks
-    if check_rule_condition(player_data, 15, 3):
+    if check_rule_condition(player_data, consolidated_data, 15, 3):
         return 5
         
     # Rule 6: 3-week average BPRE >= 15
@@ -132,11 +147,11 @@ def assign_priority_level(player_data: pd.Series, consolidated_data: pd.DataFram
         return 6
         
     # Rule 7: BPRE >= 10 for 3 consecutive weeks
-    if check_rule_condition(player_data, 10, 3):
+    if check_rule_condition(player_data, consolidated_data, 10, 3):
         return 7
         
     # Rule 8: BPRE >= 20 for 2 consecutive weeks (duplicate rule, can be removed)
-    if check_rule_condition(player_data, 20, 2):
+    if check_rule_condition(player_data, consolidated_data, 20, 2):
         return 8
         
     # Rule 9: 3-week average BPRE >= 10
@@ -144,11 +159,11 @@ def assign_priority_level(player_data: pd.Series, consolidated_data: pd.DataFram
         return 9
         
     # Rule 10: BPRE >= 15 for 2 consecutive weeks
-    if check_rule_condition(player_data, 15, 2):
+    if check_rule_condition(player_data, consolidated_data, 15, 2):
         return 10
         
     # Rule 11: BPRE >= 7 for 3 consecutive weeks
-    if check_rule_condition(player_data, 7, 3):
+    if check_rule_condition(player_data, consolidated_data, 7, 3):
         return 11
         
     # Rule 12: BPRE > 0 for 4 consecutive weeks
@@ -156,7 +171,7 @@ def assign_priority_level(player_data: pd.Series, consolidated_data: pd.DataFram
         return 12
         
     # Rule 13: BPRE >= 5 for 3 consecutive weeks
-    if check_rule_condition(player_data, 5, 3):
+    if check_rule_condition(player_data, consolidated_data, 5, 3):
         return 13
         
     # Rule 14: BPRE > 0 for 3 consecutive weeks
@@ -164,7 +179,7 @@ def assign_priority_level(player_data: pd.Series, consolidated_data: pd.DataFram
         return 14
         
     # Rule 15: BPRE >= 10 for 2 consecutive weeks
-    if check_rule_condition(player_data, 10, 2):
+    if check_rule_condition(player_data, consolidated_data, 10, 2):
         return 15
 
     # Default - lowest priority
@@ -182,7 +197,7 @@ def calculate_average_bpre(
     recent_data = player_data.head(lookback_weeks)
     if recent_data.empty:
         return 0.0
-    return recent_data['Base exceeds price premium'].mean()
+    return int(recent_data['Base exceeds price premium'].mean())
 
 def calculate_average_base(
     player_name: str,
@@ -196,7 +211,7 @@ def calculate_average_base(
     recent_data = player_data.head(lookback_weeks)
     if recent_data.empty:
         return 0.0
-    return recent_data['Total base'].mean()
+    return int(recent_data['Total base'].mean())
 
 def print_players_by_rule_level(available_players: pd.DataFrame, consolidated_data: pd.DataFrame, maximize_base: bool = False) -> None:
     """
@@ -235,8 +250,8 @@ def print_players_by_rule_level(available_players: pd.DataFrame, consolidated_da
                 f"Player: {player['Player']:<20} "
                 f"Position: {player['POS']:<5} "
                 f"Age: {player['Age']:<3} "
-                f"Current Base: {player['Current Base']:>5.1f} "
-                f"Avg Base: {player['avg_base']:>5.1f} "
+                f"Current Base: {player['Current Base']:>5.0f} "
+                f"Avg Base: {player['avg_base']:>5.0f} "
                 f"Price: ${player['Price']:,}"
             )
         return
@@ -282,16 +297,22 @@ def print_players_by_rule_level(available_players: pd.DataFrame, consolidated_da
             )
             
             for _, player in level_players_sorted.iterrows():
+                # Get the player's BPRE for each round in the last 3 rounds
+                player_data = consolidated_data[consolidated_data['Player'] == player['Player']].sort_values('Round')
+                bpre_by_round = player_data[['Round', 'Base exceeds price premium']].dropna()
+                bpre_values = ", ".join([f"round {int(row['Round'])} BPRE: {int(row['Base exceeds price premium'])}" for _, row in bpre_by_round.iterrows()])
+                
                 print(
                     f"Player: {player['Player']:<20} "
                     f"Position: {player['POS']:<5} "
                     f"Age: {player['Age']:<3} "
-                    f"Current BPRE: {player['Base exceeds price premium']:>5.1f} "
-                    f"Avg BPRE: {player['avg_bpre']:>5.1f} "
-                    f"Base: {player['Total base']:>5.1f} "
+                    f"Current BPRE: {int(player['Base exceeds price premium']):>5} "
+                    f"Avg BPRE: {int(player['avg_bpre']):>5} "
+                    f"Base: {int(player['Total base']):>5} "
                     f"Price: ${player['Price']:,} "
                     f"Consecutive Weeks: {player['consecutive_good_weeks']}"
                 )
+                print(f"BPRE by Round: {bpre_values}")
 
 def calculate_trade_options(
     consolidated_data: pd.DataFrame,
@@ -493,8 +514,8 @@ if __name__ == "__main__":
             if not latest_data.empty:
                 current_base = latest_data.iloc[0]['Total base']
                 print(f"\n{player_name}'s stats:")
-                print(f"Current base: {current_base:.1f}")
-                print(f"Average base over last 3 rounds: {avg_base:.1f}\n")
+                print(f"Current base: {current_base:.0f}")
+                print(f"Average base over last 3 rounds: {avg_base:.0f}\n")
         
         
         
@@ -524,7 +545,7 @@ if __name__ == "__main__":
                         print(f"- {player['name']} ({player['position']})")
                         print(f"  Price: ${player['price']:,}")
                         print(f"  Current Base: {player['total_base']}")
-                        print(f"  Average Base: {player['avg_base']:.1f}")
+                        print(f"  Average Base: {player['avg_base']:.0f}")
                     else:
                         print(f"- {player['name']} ({player['position']})")
                         print(f"  Price: ${player['price']:,}")
@@ -533,7 +554,7 @@ if __name__ == "__main__":
                 
                 print(f"Total Price: ${option['total_price']:,}")
                 if maximize_base:
-                    print(f"Combined Average Base: {option['total_avg_base']:.1f}")
+                    print(f"Combined Average Base: {option['total_avg_base']:.0f}")
                 else:
                     print(f"Combined Base Premium: {option['total_base_premium']}")
                 print(f"Salary Remaining: ${option['salary_remaining']:,}")
