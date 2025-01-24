@@ -135,48 +135,48 @@ def assign_priority_level(player_data: pd.Series, consolidated_data: pd.DataFram
     if check_rule_condition(player_data, consolidated_data, 20, 3):
         return 2
         
-    # Rule 3: 3-week average BPRE >= 20
-    if calculate_average_bpre(player_data['Player'], consolidated_data, 3) >= 20:
+    # Rule 3: BPRE >= 25 for 2 consecutive weeks
+    if check_rule_condition(player_data, consolidated_data, 25, 2):
         return 3
         
-    # Rule 4: BPRE >= 25 for 2 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 25, 2):
+    # Rule 4: BPRE >= 15 for 3 consecutive weeks
+    if check_rule_condition(player_data, consolidated_data, 15, 3):
         return 4
         
-    # Rule 5: BPRE >= 15 for 3 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 15, 3):
+    # Rule 5: BPRE >= 20 for 2 consecutive weeks
+    if check_rule_condition(player_data, consolidated_data, 20, 2):
         return 5
         
-    # Rule 6: 3-week average BPRE >= 15
-    if calculate_average_bpre(player_data['Player'], consolidated_data, 3) >= 15:
+    # Rule 6: BPRE >= 10 for 3 consecutive weeks
+    if check_rule_condition(player_data, consolidated_data, 10, 3):
         return 6
         
-    # Rule 7: BPRE >= 10 for 3 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 10, 3):
+    # Rule 7: BPRE >= 15 for 2 consecutive weeks
+    if check_rule_condition(player_data, consolidated_data, 15, 2):
         return 7
         
-    # Rule 8: BPRE >= 20 for 2 consecutive weeks (duplicate rule, can be removed)
-    if check_rule_condition(player_data, consolidated_data, 20, 2):
+    # Rule 8: BPRE >= 7 for 3 consecutive weeks
+    if check_rule_condition(player_data, consolidated_data, 7, 3):
         return 8
         
-    # Rule 9: 3-week average BPRE >= 10
-    if calculate_average_bpre(player_data['Player'], consolidated_data, 3) >= 10:
+    # Rule 9: 3-week average BPRE >= 20
+    if calculate_average_bpre(player_data['Player'], consolidated_data, 3) >= 20:
         return 9
         
-    # Rule 10: BPRE >= 15 for 2 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 15, 2):
+    # Rule 10: 3-week average BPRE >= 15
+    if calculate_average_bpre(player_data['Player'], consolidated_data, 3) >= 15:
         return 10
         
-    # Rule 11: BPRE >= 7 for 3 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 7, 3):
+    # Rule 11: 3-week average BPRE >= 10
+    if calculate_average_bpre(player_data['Player'], consolidated_data, 3) >= 10:
         return 11
         
-    # Rule 12: BPRE > 0 for 4 consecutive weeks
-    if check_consistent_performance(player_data['Player'], consolidated_data, 0, 4) >= 4:
+    # Rule 12: BPRE >= 5 for 3 consecutive weeks (swapped with Rule 13)
+    if check_rule_condition(player_data, consolidated_data, 5, 3):
         return 12
         
-    # Rule 13: BPRE >= 5 for 3 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 5, 3):
+    # Rule 13: BPRE > 0 for 4 consecutive weeks (swapped with Rule 12)
+    if check_consistent_performance(player_data['Player'], consolidated_data, 0, 4) >= 4:
         return 13
         
     # Rule 14: BPRE > 0 for 3 consecutive weeks
@@ -281,15 +281,15 @@ def print_players_by_rule_level(available_players: pd.DataFrame, consolidated_da
     rule_descriptions = {
         1: "BPRE >= 30 for 2 consecutive weeks",
         2: "BPRE >= 20 for 3 consecutive weeks",
-        3: "3-week average BPRE >= 20",
-        4: "BPRE >= 25 for 2 consecutive weeks",
-        5: "BPRE >= 15 for 3 consecutive weeks",
-        6: "3-week average BPRE >= 15",
-        7: "BPRE >= 10 for 3 consecutive weeks",
-        8: "BPRE >= 20 for 2 consecutive weeks (duplicate rule, can be removed)",
-        9: "3-week average BPRE >= 10",
-        10: "BPRE >= 15 for 2 consecutive weeks",
-        11: "BPRE >= 7 for 3 consecutive weeks",
+        3: "BPRE >= 25 for 2 consecutive weeks",
+        4: "BPRE >= 15 for 3 consecutive weeks",
+        5: "BPRE >= 20 for 2 consecutive weeks",
+        6: "BPRE >= 10 for 3 consecutive weeks",
+        7: "BPRE >= 15 for 2 consecutive weeks",
+        8: "BPRE >= 7 for 3 consecutive weeks",
+        9: "3-week average BPRE >= 20",
+        10: "3-week average BPRE >= 15",
+        11: "3-week average BPRE >= 10",
         12: "BPRE > 0 for 4 consecutive weeks",
         13: "BPRE >= 5 for 3 consecutive weeks",
         14: "BPRE > 0 for 3 consecutive weeks",
