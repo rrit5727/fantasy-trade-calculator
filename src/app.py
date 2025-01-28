@@ -1,7 +1,8 @@
 from flask import Flask, render_template, request, jsonify
-from nrl_trade_calculator import calculate_trade_options, load_data
+from nrl_trade_calculator import calculate_trade_options, load_data, assign_priority_level
 from typing import List, Dict, Any
 import traceback
+import pandas as pd
 
 app = Flask(__name__)
 
@@ -43,6 +44,40 @@ def prepare_trade_option(option: Dict[str, Any]) -> Dict[str, Any]:
 def index():
     return render_template('index.html')
 
+def simulate_rule_levels(consolidated_data: pd.DataFrame, rounds: List[int]) -> None:
+    player_name = consolidated_data['Player'].unique()[0]  # Assuming the first player in the data
+    print(f"\nSimulating rule levels for player: {player_name}")
+
+    # Rule descriptions
+    rule_descriptions = {
+        1: "BPRE >= 14 for 3 consecutive weeks",
+        2: "BPRE >= 21 for 2 consecutive weeks",
+        3: "BPRE >= 12 for 3 consecutive weeks",
+        4: "BPRE >= 19 for 2 consecutive weeks",
+        5: "BPRE >= 10 for 3 consecutive weeks",
+        6: "BPRE >= 17 for 2 consecutive weeks",
+        7: "BPRE >= 8 for 3 consecutive weeks",
+        8: "BPRE >= 15 for 2 consecutive weeks",
+        9: "BPRE >= 6 for 3 consecutive weeks",
+        10: "BPRE >= 13 for 2 consecutive weeks",
+        11: "BPRE >= 10 for 2 consecutive weeks",
+        12: "BPRE >= 8 for 2 consecutive weeks",
+        13: "BPRE >= 6 for 2 consecutive weeks",
+        14: "BPRE >= 2 for 3 consecutive weeks",
+        15: "BPRE >= 4 for 2 consecutive weeks",
+        16: "No rules satisfied"
+    }
+
+    for round_num in rounds:
+        player_data = consolidated_data[consolidated_data['Round'] == round_num]
+        if player_data.empty:
+            print(f"Round {round_num}: No data for player {player_name}")
+            continue
+        
+        priority_level = assign_priority_level(player_data.iloc[0], consolidated_data)
+        rule_description = rule_descriptions.get(priority_level, "Unknown rule")
+        print(f"Round {round_num}: Rule Level Satisfied: {priority_level} - {rule_description}")
+
 @app.route('/calculate', methods=['POST'])
 def calculate():
     try:
@@ -51,7 +86,7 @@ def calculate():
         player2 = request.form['player2']
         strategy = request.form['strategy']
         trade_type = request.form['tradeType']
-        allowed_positions = request.form.getlist('positions') if trade_type == 'positionalSwap' else []  # Get selected positions only for positional swap
+        allowed_positions = request.form.getlist('positions') if trade_type == 'positionalSwap' else []
 
         # Load consolidated data
         file_path = "NRL_stats.xlsx"
@@ -68,8 +103,8 @@ def calculate():
             maximize_base=maximize_base,
             hybrid_approach=hybrid_approach,
             max_options=10,
-            allowed_positions=allowed_positions,  # Pass the allowed positions
-            trade_type=trade_type  # Pass the trade type
+            allowed_positions=allowed_positions,
+            trade_type=trade_type
         )
 
         # Prepare options for JSON response
@@ -101,4 +136,29 @@ def get_players():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    try:
+        # Prompt user for action
+        while True:
+            choice = input("\nDo you want to:\n1. Run the ordinary trade calculator\n2. Run rule set simulation for 1 player\nEnter 1 or 2: ")
+            if choice in ['1', '2']:
+                break
+            print("Invalid input. Please enter 1 or 2.")
+
+        # Load the appropriate data file based on user choice
+        file_path = "NRL_stats.xlsx" if choice == '1' else "player_simulation.xlsx"
+        consolidated_data = load_data(file_path)
+        print(f"Successfully loaded data for {consolidated_data['Round'].nunique()} rounds")
+
+        if choice == '2':
+            rounds = list(range(1, 11))  # Simulate for rounds 1 to 10
+            simulate_rule_levels(consolidated_data, rounds)
+        else:
+            # Run the ordinary trade calculator
+            app.run(debug=True)
+
+    except FileNotFoundError:
+        print("Error: Could not find data file in the current directory")
+    except ValueError as e:
+        print("Error:", str(e))
+    except Exception as e:
+        print("An error occurred:", str(e))
