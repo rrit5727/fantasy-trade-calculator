@@ -49,22 +49,31 @@ def simulate_rule_levels(consolidated_data: pd.DataFrame, rounds: List[int]) -> 
 
     # Rule descriptions
     rule_descriptions = {
-        1: "BPRE >= 14 for 3 consecutive weeks",
-        2: "BPRE >= 21 for 2 consecutive weeks",
-        3: "BPRE >= 12 for 3 consecutive weeks",
-        4: "BPRE >= 19 for 2 consecutive weeks",
-        5: "BPRE >= 10 for 3 consecutive weeks",
-        6: "BPRE >= 17 for 2 consecutive weeks",
-        7: "BPRE >= 8 for 3 consecutive weeks",
-        8: "BPRE >= 15 for 2 consecutive weeks",
-        9: "BPRE >= 6 for 3 consecutive weeks",
-        10: "BPRE >= 13 for 2 consecutive weeks",
-        11: "BPRE >= 10 for 2 consecutive weeks",
-        12: "BPRE >= 8 for 2 consecutive weeks",
-        13: "BPRE >= 6 for 2 consecutive weeks",
-        14: "BPRE >= 2 for 3 consecutive weeks",
-        15: "BPRE >= 4 for 2 consecutive weeks",
-        16: "No rules satisfied"
+        1: "BPRE >= 14 for last 3 weeks",
+        2: "BPRE >= 21 for last 2 weeks",
+        3: "2 week Average BPRE >= 26",
+        4: "BPRE >= 12 for last 3 weeks",
+        5: "BPRE >= 19 for last 2 weeks",
+        6: "2 week Average BPRE >= 24",
+        7: "BPRE >= 10 for last 3 weeks",
+        8: "BPRE >= 17 for last 2 weeks",
+        9: "2 week Average BPRE >= 22",
+        10: "BPRE >= 8 for last 3 weeks",
+        11: "BPRE >= 15 for last 2 weeks",
+        12: "2 week Average BPRE >= 20",
+        13: "BPRE >= 6 for last 3 weeks",
+        14: "BPRE >= 13 for last 2 weeks",
+        15: "2 week Average BPRE >= 18",
+        16: "BPRE >= 10 for last 2 weeks",
+        17: "2 week Average BPRE >= 15",
+        18: "BPRE >= 8 for last 2 weeks",
+        19: "2 week Average BPRE >= 13",
+        20: "BPRE >= 6 for last 2 weeks",
+        21: "2 week Average BPRE >= 11",
+        22: "BPRE >= 2 for last 3 weeks",
+        23: "BPRE >= 4 for last 2 weeks",
+        24: "2 week Average BPRE >= 9",
+        25: "No rules satisfied"
     }
 
     for round_num in rounds:

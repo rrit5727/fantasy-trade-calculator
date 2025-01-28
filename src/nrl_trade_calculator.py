@@ -127,68 +127,104 @@ def assign_priority_level(player_data: pd.Series, consolidated_data: pd.DataFram
     """
     Assign priority level based on the updated rules.
     """
-    # Rule 1: BPRE >= 14 for 3 consecutive weeks
+    # Rule 1: BPRE >= 14 for last 3 weeks
     if check_rule_condition(player_data, consolidated_data, 14, 3):
         return 1
         
-    # Rule 2: BPRE >= 21 for 2 consecutive weeks
+    # Rule 2: BPRE >= 21 for last 2 weeks
     if check_rule_condition(player_data, consolidated_data, 21, 2):
         return 2
         
-    # Rule 3: BPRE >= 12 for 3 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 12, 3):
+    # Rule 3: 2 week Average BPRE >= 26
+    if calculate_average_bpre(player_data['Player'], consolidated_data, 2) >= 26:
         return 3
         
-    # Rule 4: BPRE >= 19 for 2 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 19, 2):
+    # Rule 4: BPRE >= 12 for last 3 weeks
+    if check_rule_condition(player_data, consolidated_data, 12, 3):
         return 4
         
-    # Rule 5: BPRE >= 10 for 3 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 10, 3):
+    # Rule 5: BPRE >= 19 for last 2 weeks
+    if check_rule_condition(player_data, consolidated_data, 19, 2):
         return 5
         
-    # Rule 6: BPRE >= 17 for 2 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 17, 2):
+    # Rule 6: 2 week Average BPRE >= 24
+    if calculate_average_bpre(player_data['Player'], consolidated_data, 2) >= 24:
         return 6
         
-    # Rule 7: BPRE >= 8 for 3 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 8, 3):
+    # Rule 7: BPRE >= 10 for last 3 weeks
+    if check_rule_condition(player_data, consolidated_data, 10, 3):
         return 7
         
-    # Rule 8: BPRE >= 15 for 2 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 15, 2):
+    # Rule 8: BPRE >= 17 for last 2 weeks
+    if check_rule_condition(player_data, consolidated_data, 17, 2):
         return 8
         
-    # Rule 9: BPRE >= 6 for 3 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 6, 3):
+    # Rule 9: 2 week Average BPRE >= 22
+    if calculate_average_bpre(player_data['Player'], consolidated_data, 2) >= 22:
         return 9
         
-    # Rule 10: BPRE >= 13 for 2 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 13, 2):
+    # Rule 10: BPRE >= 8 for last 3 weeks
+    if check_rule_condition(player_data, consolidated_data, 8, 3):
         return 10
         
-    # Rule 11: BPRE >= 10 for 2 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 10, 2):
+    # Rule 11: BPRE >= 15 for last 2 weeks
+    if check_rule_condition(player_data, consolidated_data, 15, 2):
         return 11
         
-    # Rule 12: BPRE >= 8 for 2 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 8, 2):
+    # Rule 12: 2 week Average BPRE >= 20
+    if calculate_average_bpre(player_data['Player'], consolidated_data, 2) >= 20:
         return 12
         
-    # Rule 13: BPRE >= 6 for 2 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 6, 2):
+    # Rule 13: BPRE >= 6 for last 3 weeks
+    if check_rule_condition(player_data, consolidated_data, 6, 3):
         return 13
         
-    # Rule 14: BPRE >= 2 for 3 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 2, 3):
+    # Rule 14: BPRE >= 13 for last 2 weeks
+    if check_rule_condition(player_data, consolidated_data, 13, 2):
         return 14
         
-    # Rule 15: BPRE >= 4 for 2 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 4, 2):
+    # Rule 15: 2 week Average BPRE >= 18
+    if calculate_average_bpre(player_data['Player'], consolidated_data, 2) >= 18:
         return 15
         
+    # Rule 16: BPRE >= 10 for last 2 weeks
+    if check_rule_condition(player_data, consolidated_data, 10, 2):
+        return 16
+        
+    # Rule 17: 2 week Average BPRE >= 15
+    if calculate_average_bpre(player_data['Player'], consolidated_data, 2) >= 15:
+        return 17
+        
+    # Rule 18: BPRE >= 8 for last 2 weeks
+    if check_rule_condition(player_data, consolidated_data, 8, 2):
+        return 18
+        
+    # Rule 19: 2 week Average BPRE >= 13
+    if calculate_average_bpre(player_data['Player'], consolidated_data, 2) >= 13:
+        return 19
+        
+    # Rule 20: BPRE >= 6 for last 2 weeks
+    if check_rule_condition(player_data, consolidated_data, 6, 2):
+        return 20
+        
+    # Rule 21: 2 week Average BPRE >= 11
+    if calculate_average_bpre(player_data['Player'], consolidated_data, 2) >= 11:
+        return 21
+        
+    # Rule 22: BPRE >= 2 for last 3 weeks
+    if check_rule_condition(player_data, consolidated_data, 2, 3):
+        return 22
+        
+    # Rule 23: BPRE >= 4 for last 2 weeks
+    if check_rule_condition(player_data, consolidated_data, 4, 2):
+        return 23
+        
+    # Rule 24: 2 week Average BPRE >= 9
+    if calculate_average_bpre(player_data['Player'], consolidated_data, 2) >= 9:
+        return 24
+        
     # Default - lowest priority
-    return 16
+    return 25
 
 def calculate_average_bpre(
     player_name: str,
@@ -240,24 +276,34 @@ def print_players_by_rule_level(available_players: pd.DataFrame, consolidated_da
     """
     print("\n=== Players Satisfying Each Rule Level ===\n")
     rule_descriptions = {
-        1: "BPRE >= 14 for 3 consecutive weeks",
-        2: "BPRE >= 21 for 2 consecutive weeks",
-        3: "BPRE >= 12 for 3 consecutive weeks",
-        4: "BPRE >= 19 for 2 consecutive weeks",
-        5: "BPRE >= 10 for 3 consecutive weeks",
-        6: "BPRE >= 17 for 2 consecutive weeks",
-        7: "BPRE >= 8 for 3 consecutive weeks",
-        8: "BPRE >= 15 for 2 consecutive weeks",
-        9: "BPRE >= 6 for 3 consecutive weeks",
-        10: "BPRE >= 13 for 2 consecutive weeks",
-        11: "BPRE >= 10 for 2 consecutive weeks",
-        12: "BPRE >= 8 for 2 consecutive weeks",
-        13: "BPRE >= 6 for 2 consecutive weeks",
-        14: "BPRE >= 2 for 3 consecutive weeks",
-        15: "BPRE >= 4 for 2 consecutive weeks",
+        1: "BPRE >= 14 for last 3 weeks",
+        2: "BPRE >= 21 for last 2 weeks",
+        3: "2 week Average BPRE >= 26",
+        4: "BPRE >= 12 for last 3 weeks",
+        5: "BPRE >= 19 for last 2 weeks",
+        6: "2 week Average BPRE >= 24",
+        7: "BPRE >= 10 for last 3 weeks",
+        8: "BPRE >= 17 for last 2 weeks",
+        9: "2 week Average BPRE >= 22",
+        10: "BPRE >= 8 for last 3 weeks",
+        11: "BPRE >= 15 for last 2 weeks",
+        12: "2 week Average BPRE >= 20",
+        13: "BPRE >= 6 for last 3 weeks",
+        14: "BPRE >= 13 for last 2 weeks",
+        15: "2 week Average BPRE >= 18",
+        16: "BPRE >= 10 for last 2 weeks",
+        17: "2 week Average BPRE >= 15",
+        18: "BPRE >= 8 for last 2 weeks",
+        19: "2 week Average BPRE >= 13",
+        20: "BPRE >= 6 for last 2 weeks",
+        21: "2 week Average BPRE >= 11",
+        22: "BPRE >= 2 for last 3 weeks",
+        23: "BPRE >= 4 for last 2 weeks",
+        24: "2 week Average BPRE >= 9",
+        25: "No rules satisfied"
     }
 
-    for level in range(1, 16):
+    for level in range(1, 25):  # Exclude rule 25
         level_players = available_players[available_players['priority_level'] == level]
         
         if not level_players.empty:
@@ -441,22 +487,31 @@ def simulate_rule_levels(consolidated_data: pd.DataFrame, rounds: List[int]) -> 
 
     # Rule descriptions
     rule_descriptions = {
-        1: "BPRE >= 14 for 3 consecutive weeks",
-        2: "BPRE >= 21 for 2 consecutive weeks",
-        3: "BPRE >= 12 for 3 consecutive weeks",
-        4: "BPRE >= 19 for 2 consecutive weeks",
-        5: "BPRE >= 10 for 3 consecutive weeks",
-        6: "BPRE >= 17 for 2 consecutive weeks",
-        7: "BPRE >= 8 for 3 consecutive weeks",
-        8: "BPRE >= 15 for 2 consecutive weeks",
-        9: "BPRE >= 6 for 3 consecutive weeks",
-        10: "BPRE >= 13 for 2 consecutive weeks",
-        11: "BPRE >= 10 for 2 consecutive weeks",
-        12: "BPRE >= 8 for 2 consecutive weeks",
-        13: "BPRE >= 6 for 2 consecutive weeks",
-        14: "BPRE >= 2 for 3 consecutive weeks",
-        15: "BPRE >= 4 for 2 consecutive weeks",
-        16: "No rules satisfied"
+        1: "BPRE >= 14 for last 3 weeks",
+        2: "BPRE >= 21 for last 2 weeks",
+        3: "2 week Average BPRE >= 26",
+        4: "BPRE >= 12 for last 3 weeks",
+        5: "BPRE >= 19 for last 2 weeks",
+        6: "2 week Average BPRE >= 24",
+        7: "BPRE >= 10 for last 3 weeks",
+        8: "BPRE >= 17 for last 2 weeks",
+        9: "2 week Average BPRE >= 22",
+        10: "BPRE >= 8 for last 3 weeks",
+        11: "BPRE >= 15 for last 2 weeks",
+        12: "2 week Average BPRE >= 20",
+        13: "BPRE >= 6 for last 3 weeks",
+        14: "BPRE >= 13 for last 2 weeks",
+        15: "2 week Average BPRE >= 18",
+        16: "BPRE >= 10 for last 2 weeks",
+        17: "2 week Average BPRE >= 15",
+        18: "BPRE >= 8 for last 2 weeks",
+        19: "2 week Average BPRE >= 13",
+        20: "BPRE >= 6 for last 2 weeks",
+        21: "2 week Average BPRE >= 11",
+        22: "BPRE >= 2 for last 3 weeks",
+        23: "BPRE >= 4 for last 2 weeks",
+        24: "2 week Average BPRE >= 9",
+        25: "No rules satisfied"
     }
 
     for round_num in rounds:
@@ -533,7 +588,7 @@ if __name__ == "__main__":
                 print(f"Current base: {current_base:.0f}")
                 print(f"Average base over last 3 rounds: {avg_base:.0f}\n")
         
-        
+        traded_out_players = ["Player1", "Player2"]  # Example players to trade out
         
         print(f"\nCalculating trade options for trading out: {', '.join(traded_out_players)}")
         print(f"Strategy: {'Maximizing base stats' if maximize_base else 'Maximizing value (BPRE)' if not hybrid_approach else 'Hybrid approach (BPRE + Base stats)'}")
