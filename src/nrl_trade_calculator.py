@@ -127,66 +127,66 @@ def assign_priority_level(player_data: pd.Series, consolidated_data: pd.DataFram
     """
     Assign priority level based on the updated rules.
     """
-    # Rule 1: BPRE >= 30 for 2 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 30, 2):
+    # Rule 1: BPRE >= 14 for 3 consecutive weeks
+    if check_rule_condition(player_data, consolidated_data, 14, 3):
         return 1
         
-    # Rule 2: BPRE >= 20 for 3 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 20, 3):
+    # Rule 2: BPRE >= 21 for 2 consecutive weeks
+    if check_rule_condition(player_data, consolidated_data, 21, 2):
         return 2
         
-    # Rule 3: BPRE >= 25 for 2 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 25, 2):
+    # Rule 3: BPRE >= 12 for 3 consecutive weeks
+    if check_rule_condition(player_data, consolidated_data, 12, 3):
         return 3
         
-    # Rule 4: BPRE >= 15 for 3 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 15, 3):
+    # Rule 4: BPRE >= 19 for 2 consecutive weeks
+    if check_rule_condition(player_data, consolidated_data, 19, 2):
         return 4
         
-    # Rule 5: BPRE >= 20 for 2 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 20, 2):
+    # Rule 5: BPRE >= 10 for 3 consecutive weeks
+    if check_rule_condition(player_data, consolidated_data, 10, 3):
         return 5
         
-    # Rule 6: BPRE >= 10 for 3 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 10, 3):
+    # Rule 6: BPRE >= 17 for 2 consecutive weeks
+    if check_rule_condition(player_data, consolidated_data, 17, 2):
         return 6
         
-    # Rule 7: BPRE >= 15 for 2 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 15, 2):
+    # Rule 7: BPRE >= 8 for 3 consecutive weeks
+    if check_rule_condition(player_data, consolidated_data, 8, 3):
         return 7
         
-    # Rule 8: BPRE >= 7 for 3 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 7, 3):
+    # Rule 8: BPRE >= 15 for 2 consecutive weeks
+    if check_rule_condition(player_data, consolidated_data, 15, 2):
         return 8
         
-    # Rule 9: 3-week average BPRE >= 20
-    if calculate_average_bpre(player_data['Player'], consolidated_data, 3) >= 20:
+    # Rule 9: BPRE >= 6 for 3 consecutive weeks
+    if check_rule_condition(player_data, consolidated_data, 6, 3):
         return 9
         
-    # Rule 10: 3-week average BPRE >= 15
-    if calculate_average_bpre(player_data['Player'], consolidated_data, 3) >= 15:
+    # Rule 10: BPRE >= 13 for 2 consecutive weeks
+    if check_rule_condition(player_data, consolidated_data, 13, 2):
         return 10
         
-    # Rule 11: 3-week average BPRE >= 10
-    if calculate_average_bpre(player_data['Player'], consolidated_data, 3) >= 10:
+    # Rule 11: BPRE >= 10 for 2 consecutive weeks
+    if check_rule_condition(player_data, consolidated_data, 10, 2):
         return 11
         
-    # Rule 12: BPRE >= 5 for 3 consecutive weeks (swapped with Rule 13)
-    if check_rule_condition(player_data, consolidated_data, 5, 3):
+    # Rule 12: BPRE >= 8 for 2 consecutive weeks
+    if check_rule_condition(player_data, consolidated_data, 8, 2):
         return 12
         
-    # Rule 13: BPRE > 0 for 4 consecutive weeks (swapped with Rule 12)
-    if check_consistent_performance(player_data['Player'], consolidated_data, 0, 4) >= 4:
+    # Rule 13: BPRE >= 6 for 2 consecutive weeks
+    if check_rule_condition(player_data, consolidated_data, 6, 2):
         return 13
         
-    # Rule 14: BPRE > 0 for 3 consecutive weeks
-    if check_consistent_performance(player_data['Player'], consolidated_data, 0, 3) >= 3:
+    # Rule 14: BPRE >= 2 for 3 consecutive weeks
+    if check_rule_condition(player_data, consolidated_data, 2, 3):
         return 14
         
-    # Rule 15: BPRE >= 10 for 2 consecutive weeks
-    if check_rule_condition(player_data, consolidated_data, 10, 2):
+    # Rule 15: BPRE >= 4 for 2 consecutive weeks
+    if check_rule_condition(player_data, consolidated_data, 4, 2):
         return 15
-
+        
     # Default - lowest priority
     return 16
 
@@ -238,63 +238,23 @@ def print_players_by_rule_level(available_players: pd.DataFrame, consolidated_da
     Print players that satisfy each rule level, with their relevant stats.
     If maximize_base is True, print top players by average base instead.
     """
-    if maximize_base:
-        print("\n=== Top Players by Average Base Stats ===\n")
-        print("-" * 80)
-        
-        # Get all players who have played in any of the last 3 rounds
-        last_three_rounds = sorted(consolidated_data['Round'].unique())[-3:]
-        recent_players_data = consolidated_data[consolidated_data['Round'].isin(last_three_rounds)]
-        all_players = recent_players_data['Player'].unique()
-        
-        # Calculate average base for all players
-        player_stats = []
-        for player in all_players:
-            avg_base = calculate_average_base(player, consolidated_data)
-            player_recent = consolidated_data[consolidated_data['Player'] == player].sort_values('Round', ascending=False).iloc[0]
-            player_stats.append({
-                'Player': player,
-                'POS': player_recent['POS'],
-                'Age': player_recent['Age'],
-                'Current Base': player_recent['Total base'],
-                'avg_base': avg_base,
-                'Price': player_recent['Price']
-            })
-        
-        # Convert to DataFrame and sort by average base
-        stats_df = pd.DataFrame(player_stats)
-        top_players = stats_df.nlargest(10, 'avg_base')
-        
-        for _, player in top_players.iterrows():
-            print(
-                f"Player: {player['Player']:<20} "
-                f"Position: {player['POS']:<5} "
-                f"Age: {player['Age']:<3} "
-                f"Current Base: {player['Current Base']:>5.0f} "
-                f"Avg Base: {player['avg_base']:>5.0f} "
-                f"Price: ${player['Price']:,}"
-            )
-        return
-
-    # Original rule-based output
     print("\n=== Players Satisfying Each Rule Level ===\n")
     rule_descriptions = {
-        1: "BPRE >= 30 for 2 consecutive weeks",
-        2: "BPRE >= 20 for 3 consecutive weeks",
-        3: "BPRE >= 25 for 2 consecutive weeks",
-        4: "BPRE >= 15 for 3 consecutive weeks",
-        5: "BPRE >= 20 for 2 consecutive weeks",
-        6: "BPRE >= 10 for 3 consecutive weeks",
-        7: "BPRE >= 15 for 2 consecutive weeks",
-        8: "BPRE >= 7 for 3 consecutive weeks",
-        9: "3-week average BPRE >= 20",
-        10: "3-week average BPRE >= 15",
-        11: "3-week average BPRE >= 10",
-        12: "BPRE > 0 for 4 consecutive weeks",
-        13: "BPRE >= 5 for 3 consecutive weeks",
-        14: "BPRE > 0 for 3 consecutive weeks",
-        15: "BPRE >= 10 for 2 consecutive weeks",
-        16: "Default - lowest priority"
+        1: "BPRE >= 14 for 3 consecutive weeks",
+        2: "BPRE >= 21 for 2 consecutive weeks",
+        3: "BPRE >= 12 for 3 consecutive weeks",
+        4: "BPRE >= 19 for 2 consecutive weeks",
+        5: "BPRE >= 10 for 3 consecutive weeks",
+        6: "BPRE >= 17 for 2 consecutive weeks",
+        7: "BPRE >= 8 for 3 consecutive weeks",
+        8: "BPRE >= 15 for 2 consecutive weeks",
+        9: "BPRE >= 6 for 3 consecutive weeks",
+        10: "BPRE >= 13 for 2 consecutive weeks",
+        11: "BPRE >= 10 for 2 consecutive weeks",
+        12: "BPRE >= 8 for 2 consecutive weeks",
+        13: "BPRE >= 6 for 2 consecutive weeks",
+        14: "BPRE >= 2 for 3 consecutive weeks",
+        15: "BPRE >= 4 for 2 consecutive weeks",
     }
 
     for level in range(1, 16):
@@ -329,8 +289,7 @@ def print_players_by_rule_level(available_players: pd.DataFrame, consolidated_da
                     f"Current BPRE: {int(player['Base exceeds price premium']):>5} "
                     f"Avg BPRE: {int(player['avg_bpre']):>5} "
                     f"Base: {int(player['Total base']):>5} "
-                    f"Price: ${player['Price']:,} "
-                    f"Consecutive Weeks: {player['consecutive_good_weeks']}"
+                    f"Price: ${player['Price']:,}"
                 )
                 print(f"BPRE by Round: {bpre_values}")
 
@@ -412,7 +371,9 @@ def calculate_trade_options(
         all_priority_levels = sorted(priority_groups.keys())
         flat_players = []
         for level in all_priority_levels:
-            flat_players.extend(priority_groups[level])
+            # Sort players within each priority level by average BPRE in descending order
+            sorted_players = sorted(priority_groups[level], key=lambda x: x['avg_bpre'], reverse=True)
+            flat_players.extend(sorted_players)
         
         # Iterate through players across all priority levels
         for i in range(0, len(flat_players), 2):
