@@ -436,6 +436,41 @@ def calculate_trade_options(
     # Limit to max_options
     return options[:max_options]
 
+def simulate_rule_levels(consolidated_data: pd.DataFrame, rounds: List[int]) -> None:
+    player_name = consolidated_data['Player'].unique()[0]  # Assuming the first player in the data
+
+    # Rule descriptions
+    rule_descriptions = {
+        1: "BPRE >= 14 for 3 consecutive weeks",
+        2: "BPRE >= 21 for 2 consecutive weeks",
+        3: "BPRE >= 12 for 3 consecutive weeks",
+        4: "BPRE >= 19 for 2 consecutive weeks",
+        5: "BPRE >= 10 for 3 consecutive weeks",
+        6: "BPRE >= 17 for 2 consecutive weeks",
+        7: "BPRE >= 8 for 3 consecutive weeks",
+        8: "BPRE >= 15 for 2 consecutive weeks",
+        9: "BPRE >= 6 for 3 consecutive weeks",
+        10: "BPRE >= 13 for 2 consecutive weeks",
+        11: "BPRE >= 10 for 2 consecutive weeks",
+        12: "BPRE >= 8 for 2 consecutive weeks",
+        13: "BPRE >= 6 for 2 consecutive weeks",
+        14: "BPRE >= 2 for 3 consecutive weeks",
+        15: "BPRE >= 4 for 2 consecutive weeks",
+        16: "No rules satisfied"
+    }
+
+    for round_num in rounds:
+        cumulative_data = consolidated_data[consolidated_data['Round'] <= round_num]
+        player_data = cumulative_data[cumulative_data['Player'] == player_name]
+        
+        if player_data.empty:
+            print(f"Round {round_num}: No data for player {player_name}")
+            continue
+        
+        priority_level = assign_priority_level(player_data.iloc[-1], cumulative_data)
+        rule_description = rule_descriptions.get(priority_level, "Unknown rule")
+        print(f"Rule levels passed as at round {round_num}: Rule Level Satisfied: {priority_level} - {rule_description}")
+
 if __name__ == "__main__":
     try:
         # Example file path - modify according to your setup

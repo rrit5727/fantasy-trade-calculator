@@ -46,7 +46,6 @@ def index():
 
 def simulate_rule_levels(consolidated_data: pd.DataFrame, rounds: List[int]) -> None:
     player_name = consolidated_data['Player'].unique()[0]  # Assuming the first player in the data
-    print(f"\nSimulating rule levels for player: {player_name}")
 
     # Rule descriptions
     rule_descriptions = {
@@ -69,14 +68,19 @@ def simulate_rule_levels(consolidated_data: pd.DataFrame, rounds: List[int]) -> 
     }
 
     for round_num in rounds:
-        player_data = consolidated_data[consolidated_data['Round'] == round_num]
+        # Get the last 4 rounds up to the current round
+        recent_rounds = sorted(consolidated_data['Round'].unique())
+        recent_rounds = [r for r in recent_rounds if r <= round_num][-4:]
+        cumulative_data = consolidated_data[consolidated_data['Round'].isin(recent_rounds)]
+        player_data = cumulative_data[cumulative_data['Player'] == player_name]
+        
         if player_data.empty:
             print(f"Round {round_num}: No data for player {player_name}")
             continue
         
-        priority_level = assign_priority_level(player_data.iloc[0], consolidated_data)
+        priority_level = assign_priority_level(player_data.iloc[-1], cumulative_data)
         rule_description = rule_descriptions.get(priority_level, "Unknown rule")
-        print(f"Round {round_num}: Rule Level Satisfied: {priority_level} - {rule_description}")
+        print(f"Rule levels passed as at round {round_num}: Rule Level Satisfied: {priority_level} - {rule_description}")
 
 @app.route('/calculate', methods=['POST'])
 def calculate():
@@ -150,7 +154,7 @@ if __name__ == "__main__":
         print(f"Successfully loaded data for {consolidated_data['Round'].nunique()} rounds")
 
         if choice == '2':
-            rounds = list(range(1, 11))  # Simulate for rounds 1 to 10
+            rounds = list(range(1, int(consolidated_data['Round'].max()) + 1))  # Simulate for all rounds
             simulate_rule_levels(consolidated_data, rounds)
         else:
             # Run the ordinary trade calculator
