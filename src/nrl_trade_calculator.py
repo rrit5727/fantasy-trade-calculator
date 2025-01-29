@@ -575,6 +575,10 @@ def calculate_trade_options(
     available_players = (recent_players_data[~recent_players_data['Player'].isin(traded_out_players)]
                         .groupby('Player').last().reset_index())
     
+    # Filter players by allowed positions if specified
+    if allowed_positions:
+        available_players = available_players[available_players['POS'].isin(allowed_positions)]
+    
     # Initialize consecutive_good_weeks column
     available_players['consecutive_good_weeks'] = 0
     
