@@ -98,6 +98,10 @@ def calculate():
         player1 = request.form['player1']
         player2 = request.form['player2']
         strategy = request.form['strategy']
+        
+        # Print the strategy to the console
+        print(f"Strategy selected: {strategy}")
+        
         trade_type = request.form['tradeType']
         allowed_positions = request.form.getlist('positions') if trade_type == 'positionalSwap' else []
 
