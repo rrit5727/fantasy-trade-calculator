@@ -347,18 +347,12 @@ def generate_comprehensive_trade_options(priority_groups, salary_freed, maximize
     valid_combinations = []
     used_players = set()  # Track which players have been used in combinations
     
-    if maximize_base or hybrid_approach:
-        # Flatten and sort all players together
+    if maximize_base:
+        # Flatten and sort all players by base stats
         flat_players = []
         for level in sorted(priority_groups.keys()):
             flat_players.extend(priority_groups[level])
-            
-        if maximize_base:
-            # Sort primarily by average base stats
-            flat_players.sort(key=lambda x: (x['avg_base'], x['avg_bpre']), reverse=True)
-        else:  # hybrid_approach
-            # Sort by a combination of base stats and BPRE
-            flat_players.sort(key=lambda x: (x['avg_base'] * 0.5 + x['avg_bpre'] * 0.5), reverse=True)
+        flat_players.sort(key=lambda x: (x['avg_base'], x['avg_bpre']), reverse=True)
         
         # Generate combinations
         for i in range(len(flat_players)):
@@ -369,7 +363,6 @@ def generate_comprehensive_trade_options(priority_groups, salary_freed, maximize
                 if flat_players[j]['Player'] in used_players:
                     continue
                     
-                # Check if combination is valid
                 first_player = flat_players[i]
                 second_player = flat_players[j]
                 total_price = first_player['Price'] + second_player['Price']
@@ -388,13 +381,58 @@ def generate_comprehensive_trade_options(priority_groups, salary_freed, maximize
                         'total_avg_base': (first_player['avg_base'] + second_player['avg_base']) / 2,
                         'combo_avg_bpre': (first_player['avg_bpre'] + second_player['avg_bpre']) / 2
                     }
-                    
                     valid_combinations.append(combo)
-                    # Add both players to used set
                     used_players.add(first_player['Player'])
                     used_players.add(second_player['Player'])
+                    break
                     
-                    # Break inner loop after finding a valid combination
+            if len(valid_combinations) >= max_options:
+                break
+                
+    elif hybrid_approach:
+        # Get players sorted by priority level (value strategy)
+        value_players = []
+        for level in sorted(priority_groups.keys()):
+            level_players = priority_groups[level]
+            # Sort players within each level by BPRE
+            level_players.sort(key=lambda x: x['avg_bpre'], reverse=True)
+            value_players.extend(level_players)
+        
+        # Get players sorted by base stats
+        base_players = []
+        for level in sorted(priority_groups.keys()):
+            base_players.extend(priority_groups[level])
+        base_players.sort(key=lambda x: x['avg_base'], reverse=True)
+        
+        # Generate combinations using one player from each strategy
+        for value_player in value_players:
+            if value_player['Player'] in used_players:
+                continue
+                
+            remaining_salary = salary_freed - value_player['Price']
+            
+            # Find the highest base stat player we can afford
+            for base_player in base_players:
+                if (base_player['Player'] not in used_players and 
+                    base_player['Player'] != value_player['Player'] and 
+                    base_player['Price'] <= remaining_salary):
+                    
+                    combo = {
+                        'players': [
+                            create_player_dict(value_player),
+                            create_player_dict(base_player)
+                        ],
+                        'total_price': value_player['Price'] + base_player['Price'],
+                        'total_base': value_player['Total base'] + base_player['Total base'],
+                        'total_base_premium': (value_player['Base exceeds price premium'] + 
+                                             base_player['Base exceeds price premium']),
+                        'salary_remaining': salary_freed - (value_player['Price'] + base_player['Price']),
+                        'total_avg_base': (value_player['avg_base'] + base_player['avg_base']) / 2,
+                        'combo_avg_bpre': (value_player['avg_bpre'] + base_player['avg_bpre']) / 2
+                    }
+                    valid_combinations.append(combo)
+                    used_players.add(value_player['Player'])
+                    used_players.add(base_player['Player'])
                     break
                     
             if len(valid_combinations) >= max_options:
@@ -435,7 +473,6 @@ def generate_comprehensive_trade_options(priority_groups, salary_freed, maximize
                             'total_avg_base': (first_player['avg_base'] + second_player['avg_base']) / 2,
                             'combo_avg_bpre': (first_player['avg_bpre'] + second_player['avg_bpre']) / 2
                         }
-                        
                         valid_combinations.append(combo)
                         used_players.add(first_player['Player'])
                         used_players.add(second_player['Player'])
@@ -464,7 +501,6 @@ def generate_comprehensive_trade_options(priority_groups, salary_freed, maximize
                                     'total_avg_base': (first_player['avg_base'] + second_player['avg_base']) / 2,
                                     'combo_avg_bpre': (first_player['avg_bpre'] + second_player['avg_bpre']) / 2
                                 }
-                                
                                 valid_combinations.append(combo)
                                 used_players.add(first_player['Player'])
                                 used_players.add(second_player['Player'])
