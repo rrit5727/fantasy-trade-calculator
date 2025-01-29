@@ -254,20 +254,29 @@ def calculate_average_bpre(
 def calculate_average_base(
     player_name: str,
     consolidated_data: pd.DataFrame,
-    lookback_weeks: int = 3
+    lookback_weeks: int = 3,
+    min_games: int = 2  # New parameter to specify minimum games required
 ) -> float:
     """
     Calculate average Total base for a player over their recent weeks.
-    Only calculate the average if the player has played in at least `lookback_weeks` rounds.
+    Only calculate the average if the player has played in at least `min_games` rounds.
+    
+    Parameters:
+    player_name (str): Name of the player
+    consolidated_data (pd.DataFrame): DataFrame containing all player data
+    lookback_weeks (int): Number of weeks to look back for calculating average
+    min_games (int): Minimum number of games required to calculate average
+    
+    Returns:
+    float: Average base value, or 0.0 if minimum games requirement not met
     """
     player_data = consolidated_data[consolidated_data['Player'] == player_name].sort_values('Round', ascending=False)
     recent_data = player_data.head(lookback_weeks)
     
-    # Only calculate the average if the player has played in at least `lookback_weeks` rounds
-    if len(recent_data) < lookback_weeks:
-        return 0.0  # Return 0 if the player hasn't played enough rounds
-    
-    return int(recent_data['Total base'].mean())
+    # Check if player has played minimum required games
+    if len(recent_data) >= min_games:
+        return int(recent_data['Total base'].mean())
+    return 0.0
 
 def print_players_by_rule_level(available_players: pd.DataFrame, consolidated_data: pd.DataFrame, maximize_base: bool = False) -> None:
     """
@@ -536,11 +545,13 @@ def calculate_trade_options(
     hybrid_approach: bool = False,
     max_options: int = 10,
     allowed_positions: List[str] = None,
-    trade_type: str = 'likeForLike'
+    trade_type: str = 'likeForLike',
+    min_games: int = 2  # New parameter
 ) -> List[Dict]:
     """
     Calculate possible trade combinations based on consolidated data and prioritized rules.
     If maximize_base is True, prioritize players with highest base stats instead of BPRE.
+    Modified to consider players with at least min_games when maximizing base stats.
     """
     latest_round = consolidated_data['Round'].max()
     last_three_rounds = sorted(consolidated_data['Round'].unique())[-3:]
@@ -581,7 +592,7 @@ def calculate_trade_options(
     )
     
     available_players['avg_base'] = available_players['Player'].apply(
-        lambda x: calculate_average_base(x, consolidated_data)
+        lambda x: calculate_average_base(x, consolidated_data, min_games=min_games)
     )
 
     # Now calculate priority levels
