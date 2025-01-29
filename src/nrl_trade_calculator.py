@@ -387,7 +387,7 @@ def generate_comprehensive_trade_options(priority_groups, salary_freed, maximize
                         'total_base_premium': (first_player['Base exceeds price premium'] + 
                                              second_player['Base exceeds price premium']),
                         'salary_remaining': salary_freed - total_price,
-                        'total_avg_base': (first_player['avg_base'] + second_player['avg_base']) / 2,
+                        'total_avg_base': first_player['avg_base'] + second_player['avg_base'],  # Sum the average base
                         'combo_avg_bpre': (first_player['avg_bpre'] + second_player['avg_bpre']) / 2
                     }
                     valid_combinations.append(combo)
@@ -436,7 +436,7 @@ def generate_comprehensive_trade_options(priority_groups, salary_freed, maximize
                         'total_base_premium': (value_player['Base exceeds price premium'] + 
                                              base_player['Base exceeds price premium']),
                         'salary_remaining': salary_freed - (value_player['Price'] + base_player['Price']),
-                        'total_avg_base': (value_player['avg_base'] + base_player['avg_base']) / 2,
+                        'total_avg_base': value_player['avg_base'] + base_player['avg_base'],  # Sum the average base
                         'combo_avg_bpre': (value_player['avg_bpre'] + base_player['avg_bpre']) / 2
                     }
                     valid_combinations.append(combo)
@@ -479,7 +479,7 @@ def generate_comprehensive_trade_options(priority_groups, salary_freed, maximize
                             'total_base_premium': (first_player['Base exceeds price premium'] + 
                                                  second_player['Base exceeds price premium']),
                             'salary_remaining': salary_freed - total_price,
-                            'total_avg_base': (first_player['avg_base'] + second_player['avg_base']) / 2,
+                            'total_avg_base': first_player['avg_base'] + second_player['avg_base'],  # Sum the average base
                             'combo_avg_bpre': (first_player['avg_bpre'] + second_player['avg_bpre']) / 2
                         }
                         valid_combinations.append(combo)
@@ -507,7 +507,7 @@ def generate_comprehensive_trade_options(priority_groups, salary_freed, maximize
                                     'total_base_premium': (first_player['Base exceeds price premium'] + 
                                                          second_player['Base exceeds price premium']),
                                     'salary_remaining': salary_freed - total_price,
-                                    'total_avg_base': (first_player['avg_base'] + second_player['avg_base']) / 2,
+                                    'total_avg_base': first_player['avg_base'] + second_player['avg_base'],  # Sum the average base
                                     'combo_avg_bpre': (first_player['avg_bpre'] + second_player['avg_bpre']) / 2
                                 }
                                 valid_combinations.append(combo)
