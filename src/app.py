@@ -96,7 +96,7 @@ def calculate():
     try:
         # Get data from the form
         player1 = request.form['player1']
-        player2 = request.form['player2']
+        player2 = request.form.get('player2')  # Use get to handle optional player2
         strategy = request.form['strategy']
         
         # Print the strategy to the console
@@ -113,10 +113,15 @@ def calculate():
         maximize_base = (strategy == '2')
         hybrid_approach = (strategy == '3')
 
+        # Create list of traded out players
+        traded_out_players = [player1]
+        if player2:
+            traded_out_players.append(player2)
+
         # Calculate trade options
         options = calculate_trade_options(
             consolidated_data=consolidated_data,
-            traded_out_players=[player1, player2],
+            traded_out_players=traded_out_players,
             maximize_base=maximize_base,
             hybrid_approach=hybrid_approach,
             max_options=10,

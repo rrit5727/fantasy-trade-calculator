@@ -42,8 +42,8 @@
         </div>
         
         <div class="form-group">
-            <label for="player2">Player 2 to Trade Out:</label>
-            <input type="text" id="player2" name="player2" required>
+            <label for="player2">Player 2 to Trade Out (optional):</label>
+            <input type="text" id="player2" name="player2">
         </div>
         
         <div class="form-group">
@@ -109,10 +109,17 @@
             $('#tradeForm').on('submit', function(e) {
                 e.preventDefault();
                 $('#results').html('Calculating...');
+                
+                // Serialize form data
+                let formData = $(this).serializeArray();
+                
+                // Remove player2 from formData if it's empty
+                formData = formData.filter(field => !(field.name === 'player2' && !field.value));
+                
                 $.ajax({
                     url: '/calculate',
                     method: 'POST',
-                    data: $(this).serialize(),
+                    data: $.param(formData),
                     success: function(options) {
                         let html = '<h2>Trade Options</h2>';
                         

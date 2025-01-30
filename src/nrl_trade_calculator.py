@@ -355,7 +355,8 @@ def generate_comprehensive_trade_options(
     hybrid_approach=False, 
     max_options=10,
     trade_type='likeForLike',
-    traded_out_positions=None
+    traded_out_positions=None,
+    num_players_needed=2
 ):
     """
     Generate trade combinations based on selected optimization strategy while ensuring
@@ -383,50 +384,62 @@ def generate_comprehensive_trade_options(
         flat_players.sort(key=lambda x: (x['avg_base'], x['avg_bpre']), reverse=True)
         
         # Generate combinations
-        if trade_type == 'likeForLike' and traded_out_positions:
-            for i in range(len(flat_players)):
-                if flat_players[i]['Player'] in used_players:
+        if num_players_needed == 1:
+            for player in flat_players:
+                if player['Player'] in used_players:
                     continue
-                    
-                for j in range(i + 1, len(flat_players)):
-                    if flat_players[j]['Player'] in used_players:
-                        continue
-                        
-                    first_player = flat_players[i]
-                    second_player = flat_players[j]
-                    
-                    # Check if positions match traded out positions
-                    positions = {first_player['POS'], second_player['POS']}
-                    if positions != set(traded_out_positions):
-                        continue
-                        
-                    total_price = first_player['Price'] + second_player['Price']
-                    if total_price <= salary_freed:
-                        combo = create_combination(first_player, second_player, total_price, salary_freed)
-                        valid_combinations.append(combo)
-                        used_players.add(first_player['Player'])
-                        used_players.add(second_player['Player'])
+                
+                if player['Price'] <= salary_freed:
+                    combo = create_combination([player], player['Price'], salary_freed)
+                    valid_combinations.append(combo)
+                    used_players.add(player['Player'])
+                    if len(valid_combinations) >= max_options:
                         break
         else:
-            # Original logic for non-like-for-like trades
-            for i in range(len(flat_players)):
-                if flat_players[i]['Player'] in used_players:
-                    continue
-                    
-                for j in range(i + 1, len(flat_players)):
-                    if flat_players[j]['Player'] in used_players:
+            if trade_type == 'likeForLike' and traded_out_positions:
+                for i in range(len(flat_players)):
+                    if flat_players[i]['Player'] in used_players:
                         continue
                         
-                    first_player = flat_players[i]
-                    second_player = flat_players[j]
-                    total_price = first_player['Price'] + second_player['Price']
-                    
-                    if total_price <= salary_freed:
-                        combo = create_combination(first_player, second_player, total_price, salary_freed)
-                        valid_combinations.append(combo)
-                        used_players.add(first_player['Player'])
-                        used_players.add(second_player['Player'])
-                        break
+                    for j in range(i + 1, len(flat_players)):
+                        if flat_players[j]['Player'] in used_players:
+                            continue
+                            
+                        first_player = flat_players[i]
+                        second_player = flat_players[j]
+                        
+                        # Check if positions match traded out positions
+                        positions = {first_player['POS'], second_player['POS']}
+                        if positions != set(traded_out_positions):
+                            continue
+                            
+                        total_price = first_player['Price'] + second_player['Price']
+                        if total_price <= salary_freed:
+                            combo = create_combination([first_player, second_player], total_price, salary_freed)
+                            valid_combinations.append(combo)
+                            used_players.add(first_player['Player'])
+                            used_players.add(second_player['Player'])
+                            break
+            else:
+                # Original logic for non-like-for-like trades
+                for i in range(len(flat_players)):
+                    if flat_players[i]['Player'] in used_players:
+                        continue
+                        
+                    for j in range(i + 1, len(flat_players)):
+                        if flat_players[j]['Player'] in used_players:
+                            continue
+                            
+                        first_player = flat_players[i]
+                        second_player = flat_players[j]
+                        total_price = first_player['Price'] + second_player['Price']
+                        
+                        if total_price <= salary_freed:
+                            combo = create_combination([first_player, second_player], total_price, salary_freed)
+                            valid_combinations.append(combo)
+                            used_players.add(first_player['Player'])
+                            used_players.add(second_player['Player'])
+                            break
                         
     elif hybrid_approach:
         value_players = []
@@ -440,47 +453,59 @@ def generate_comprehensive_trade_options(
             base_players.extend(position_filtered_groups[level])
         base_players.sort(key=lambda x: x['avg_base'], reverse=True)
         
-        if trade_type == 'likeForLike' and traded_out_positions:
-            for value_player in value_players:
-                if value_player['Player'] in used_players:
+        if num_players_needed == 1:
+            for player in value_players:
+                if player['Player'] in used_players:
                     continue
-                    
-                remaining_salary = salary_freed - value_player['Price']
-                needed_position = [pos for pos in traded_out_positions if pos != value_player['POS']][0]
                 
-                for base_player in base_players:
-                    if (base_player['Player'] not in used_players and 
-                        base_player['Player'] != value_player['Player'] and 
-                        base_player['POS'] == needed_position and
-                        base_player['Price'] <= remaining_salary):
-                        
-                        combo = create_combination(value_player, base_player, 
-                                                value_player['Price'] + base_player['Price'],
-                                                salary_freed)
-                        valid_combinations.append(combo)
-                        used_players.add(value_player['Player'])
-                        used_players.add(base_player['Player'])
+                if player['Price'] <= salary_freed:
+                    combo = create_combination([player], player['Price'], salary_freed)
+                    valid_combinations.append(combo)
+                    used_players.add(player['Player'])
+                    if len(valid_combinations) >= max_options:
                         break
         else:
-            # Original hybrid approach logic
-            for value_player in value_players:
-                if value_player['Player'] in used_players:
-                    continue
-                    
-                remaining_salary = salary_freed - value_player['Price']
-                
-                for base_player in base_players:
-                    if (base_player['Player'] not in used_players and 
-                        base_player['Player'] != value_player['Player'] and 
-                        base_player['Price'] <= remaining_salary):
+            if trade_type == 'likeForLike' and traded_out_positions:
+                for value_player in value_players:
+                    if value_player['Player'] in used_players:
+                        continue
                         
-                        combo = create_combination(value_player, base_player,
-                                                value_player['Price'] + base_player['Price'],
-                                                salary_freed)
-                        valid_combinations.append(combo)
-                        used_players.add(value_player['Player'])
-                        used_players.add(base_player['Player'])
-                        break
+                    remaining_salary = salary_freed - value_player['Price']
+                    needed_position = [pos for pos in traded_out_positions if pos != value_player['POS']][0]
+                    
+                    for base_player in base_players:
+                        if (base_player['Player'] not in used_players and 
+                            base_player['Player'] != value_player['Player'] and 
+                            base_player['POS'] == needed_position and
+                            base_player['Price'] <= remaining_salary):
+                            
+                            combo = create_combination([value_player, base_player], 
+                                                    value_player['Price'] + base_player['Price'],
+                                                    salary_freed)
+                            valid_combinations.append(combo)
+                            used_players.add(value_player['Player'])
+                            used_players.add(base_player['Player'])
+                            break
+            else:
+                # Original hybrid approach logic
+                for value_player in value_players:
+                    if value_player['Player'] in used_players:
+                        continue
+                        
+                    remaining_salary = salary_freed - value_player['Price']
+                    
+                    for base_player in base_players:
+                        if (base_player['Player'] not in used_players and 
+                            base_player['Player'] != value_player['Player'] and 
+                            base_player['Price'] <= remaining_salary):
+                            
+                            combo = create_combination([value_player, base_player],
+                                                    value_player['Price'] + base_player['Price'],
+                                                    salary_freed)
+                            valid_combinations.append(combo)
+                            used_players.add(value_player['Player'])
+                            used_players.add(base_player['Player'])
+                            break
     else:  # maximize_value - strict rule level ordering
         priority_levels = sorted(position_filtered_groups.keys())
         
@@ -488,104 +513,112 @@ def generate_comprehensive_trade_options(
             players_in_level = position_filtered_groups[level]
             players_in_level.sort(key=lambda x: x['avg_bpre'], reverse=True)
             
-            if trade_type == 'likeForLike' and traded_out_positions:
-                for i, first_player in enumerate(players_in_level):
-                    if first_player['Player'] in used_players:
+            if num_players_needed == 1:
+                for player in players_in_level:
+                    if player['Player'] in used_players:
                         continue
-                        
-                    valid_combo_found = False
-                    needed_position = [pos for pos in traded_out_positions if pos != first_player['POS']]
                     
-                    # Try pairing with other players from same level with matching position
-                    for j in range(i + 1, len(players_in_level)):
-                        second_player = players_in_level[j]
-                        if (second_player['Player'] not in used_players and 
-                            second_player['POS'] in needed_position):
+                    if player['Price'] <= salary_freed:
+                        combo = create_combination([player], player['Price'], salary_freed)
+                        valid_combinations.append(combo)
+                        used_players.add(player['Player'])
+                        if len(valid_combinations) >= max_options:
+                            break
+            else:
+                if trade_type == 'likeForLike' and traded_out_positions:
+                    for i, first_player in enumerate(players_in_level):
+                        if first_player['Player'] in used_players:
+                            continue
                             
+                        valid_combo_found = False
+                        needed_position = [pos for pos in traded_out_positions if pos != first_player['POS']]
+                        
+                        # Try pairing with other players from same level with matching position
+                        for j in range(i + 1, len(players_in_level)):
+                            second_player = players_in_level[j]
+                            if (second_player['Player'] not in used_players and 
+                                second_player['POS'] in needed_position):
+                                
+                                total_price = first_player['Price'] + second_player['Price']
+                                if total_price <= salary_freed:
+                                    combo = create_combination([first_player, second_player],
+                                                            total_price, salary_freed)
+                                    valid_combinations.append(combo)
+                                    used_players.add(first_player['Player'])
+                                    used_players.add(second_player['Player'])
+                                    valid_combo_found = True
+                                    break
+                        
+                        if not valid_combo_found and first_player['Player'] not in used_players:
+                            # Try next levels if no valid combination found in current level
+                            for next_level in priority_levels[priority_levels.index(level)+1:]:
+                                for second_player in position_filtered_groups[next_level]:
+                                    if (second_player['Player'] not in used_players and 
+                                        second_player['POS'] in needed_position):
+                                        
+                                        total_price = first_player['Price'] + second_player['Price']
+                                        if total_price <= salary_freed:
+                                            combo = create_combination([first_player, second_player],
+                                                                    total_price, salary_freed)
+                                            valid_combinations.append(combo)
+                                            used_players.add(first_player['Player'])
+                                            used_players.add(second_player['Player'])
+                                            valid_combo_found = True
+                                            break
+                                
+                                if valid_combo_found:
+                                    break
+                else:
+                    # Original maximize_value logic
+                    for i, first_player in enumerate(players_in_level):
+                        if first_player['Player'] in used_players:
+                            continue
+                            
+                        valid_combo_found = False
+                        
+                        for j in range(i + 1, len(players_in_level)):
+                            second_player = players_in_level[j]
+                            if second_player['Player'] in used_players:
+                                continue
+                                
                             total_price = first_player['Price'] + second_player['Price']
                             if total_price <= salary_freed:
-                                combo = create_combination(first_player, second_player,
+                                combo = create_combination([first_player, second_player],
                                                         total_price, salary_freed)
                                 valid_combinations.append(combo)
                                 used_players.add(first_player['Player'])
                                 used_players.add(second_player['Player'])
                                 valid_combo_found = True
                                 break
-                    
-                    if not valid_combo_found and first_player['Player'] not in used_players:
-                        # Try next levels if no valid combination found in current level
-                        for next_level in priority_levels[priority_levels.index(level)+1:]:
-                            for second_player in position_filtered_groups[next_level]:
-                                if (second_player['Player'] not in used_players and 
-                                    second_player['POS'] in needed_position):
-                                    
-                                    total_price = first_player['Price'] + second_player['Price']
-                                    if total_price <= salary_freed:
-                                        combo = create_combination(first_player, second_player,
-                                                                total_price, salary_freed)
-                                        valid_combinations.append(combo)
-                                        used_players.add(first_player['Player'])
-                                        used_players.add(second_player['Player'])
-                                        valid_combo_found = True
-                                        break
-                            
-                            if valid_combo_found:
-                                break
-            else:
-                # Original maximize_value logic
-                for i, first_player in enumerate(players_in_level):
-                    if first_player['Player'] in used_players:
-                        continue
                         
-                    valid_combo_found = False
-                    
-                    for j in range(i + 1, len(players_in_level)):
-                        second_player = players_in_level[j]
-                        if second_player['Player'] in used_players:
-                            continue
-                            
-                        total_price = first_player['Price'] + second_player['Price']
-                        if total_price <= salary_freed:
-                            combo = create_combination(first_player, second_player,
-                                                    total_price, salary_freed)
-                            valid_combinations.append(combo)
-                            used_players.add(first_player['Player'])
-                            used_players.add(second_player['Player'])
-                            valid_combo_found = True
-                            break
-                    
-                    if not valid_combo_found and first_player['Player'] not in used_players:
-                        for next_level in priority_levels[priority_levels.index(level)+1:]:
-                            for second_player in position_filtered_groups[next_level]:
-                                if second_player['Player'] not in used_players:
-                                    total_price = first_player['Price'] + second_player['Price']
-                                    if total_price <= salary_freed:
-                                        combo = create_combination(first_player, second_player,
-                                                                total_price, salary_freed)
-                                        valid_combinations.append(combo)
-                                        used_players.add(first_player['Player'])
-                                        used_players.add(second_player['Player'])
-                                        valid_combo_found = True
-                                        break
-                            if valid_combo_found:
-                                break
+                        if not valid_combo_found and first_player['Player'] not in used_players:
+                            for next_level in priority_levels[priority_levels.index(level)+1:]:
+                                for second_player in position_filtered_groups[next_level]:
+                                    if second_player['Player'] not in used_players:
+                                        total_price = first_player['Price'] + second_player['Price']
+                                        if total_price <= salary_freed:
+                                            combo = create_combination([first_player, second_player],
+                                                                    total_price, salary_freed)
+                                            valid_combinations.append(combo)
+                                            used_players.add(first_player['Player'])
+                                            used_players.add(second_player['Player'])
+                                            valid_combo_found = True
+                                            break
+                                if valid_combo_found:
+                                    break
     
     return valid_combinations[:max_options]
 
-def create_combination(first_player, second_player, total_price, salary_freed):
+def create_combination(players, total_price, salary_freed):
     """Helper function to create a trade combination dictionary"""
     return {
-        'players': [
-            create_player_dict(first_player),
-            create_player_dict(second_player)
-        ],
+        'players': [create_player_dict(player) for player in players],
         'total_price': total_price,
-        'total_base': first_player['Total base'] + second_player['Total base'],
-        'total_base_premium': (first_player['Base exceeds price premium'] + 
-                             second_player['Base exceeds price premium']),
+        'total_base': sum(player['Total base'] for player in players),
+        'total_base_premium': sum(player['Base exceeds price premium'] for player in players),
         'salary_remaining': salary_freed - total_price,
-        'total_avg_base': first_player['avg_base'] + second_player['avg_base'],
-        'combo_avg_bpre': (first_player['avg_bpre'] + second_player['avg_bpre']) / 2
+        'total_avg_base': sum(player['avg_base'] for player in players),
+        'combo_avg_bpre': sum(player['avg_bpre'] for player in players) / len(players)
     }
 
 def create_player_dict(player):
@@ -630,11 +663,6 @@ def calculate_trade_options(
     trade_type: str = 'likeForLike',
     min_games: int = 2  # New parameter
 ) -> List[Dict]:
-    """
-    Calculate possible trade combinations based on consolidated data and prioritized rules.
-    If maximize_base is True, prioritize players with highest base stats instead of BPRE.
-    Modified to consider players with at least min_games when maximizing base stats.
-    """
     # Get positions of traded out players for like-for-like trades
     traded_out_positions = (get_traded_out_positions(traded_out_players, consolidated_data) 
                           if trade_type == 'likeForLike' 
@@ -712,7 +740,8 @@ def calculate_trade_options(
         hybrid_approach,
         max_options,
         trade_type,
-        traded_out_positions
+        traded_out_positions,
+        num_players_needed
     )
     
     # Limit to max_options
