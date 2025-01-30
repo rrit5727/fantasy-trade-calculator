@@ -104,10 +104,17 @@ def calculate():
         
         trade_type = request.form['tradeType']
         allowed_positions = request.form.getlist('positions') if trade_type == 'positionalSwap' else []
+        restrict_to_team_list = 'restrictToTeamList' in request.form
 
         # Load consolidated data
         file_path = "NRL_stats.xlsx"
         consolidated_data = load_data(file_path)
+
+        # Load team list data if restriction is enabled
+        team_list = None
+        if restrict_to_team_list:
+            team_list_path = "team_lists.xlsx"
+            team_list = load_data(team_list_path)['Player'].unique().tolist()
 
         # Determine optimization strategy
         maximize_base = (strategy == '2')
@@ -126,7 +133,8 @@ def calculate():
             hybrid_approach=hybrid_approach,
             max_options=10,
             allowed_positions=allowed_positions,
-            trade_type=trade_type
+            trade_type=trade_type,
+            team_list=team_list  # Pass the team list to the function
         )
 
         # Prepare options for JSON response

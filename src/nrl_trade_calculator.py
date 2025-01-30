@@ -661,7 +661,8 @@ def calculate_trade_options(
     max_options: int = 10,
     allowed_positions: List[str] = None,
     trade_type: str = 'likeForLike',
-    min_games: int = 2  # New parameter
+    min_games: int = 2,  # New parameter
+    team_list: List[str] = None  # New parameter
 ) -> List[Dict]:
     # Get positions of traded out players for like-for-like trades
     traded_out_positions = (get_traded_out_positions(traded_out_players, consolidated_data) 
@@ -697,6 +698,10 @@ def calculate_trade_options(
     # Filter players by allowed positions if specified
     if positions_to_use:
         available_players = available_players[available_players['POS'].isin(positions_to_use)]
+    
+    # Filter players by team list if specified
+    if team_list:
+        available_players = available_players[available_players['Player'].isin(team_list)]
     
     # Initialize consecutive_good_weeks column
     available_players['consecutive_good_weeks'] = 0
