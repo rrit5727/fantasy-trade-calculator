@@ -68,6 +68,16 @@
             <label for="restrictToTeamList">Restrict choices to players named in Team lists</label>
         </div>
 
+        <div class="form-group">
+            <input type="checkbox" id="applyLockout" name="applyLockout">
+            <label for="applyLockout">Apply lockout restriction</label>
+        </div>
+
+        <div class="form-group" id="simulateDateTimeGroup">
+            <label for="simulateDateTime">Simulate Current Date/Time:</label>
+            <input type="datetime-local" id="simulateDateTime" name="simulateDateTime">
+        </div>
+
         <div class="form-group" id="positionSelection" style="display: none;">
             <label for="positions">Select Positions for Swap:</label>
             <select id="positions" name="positions" multiple>
@@ -111,6 +121,15 @@
                 }
             });
 
+            // Show/hide simulate date/time based on lockout restriction
+            $('#applyLockout').change(function() {
+                if ($(this).is(':checked')) {
+                    $('#simulateDateTimeGroup').show();
+                } else {
+                    $('#simulateDateTimeGroup').hide();
+                }
+            });
+
             $('#tradeForm').on('submit', function(e) {
                 e.preventDefault();
                 $('#results').html('Calculating...');
@@ -120,6 +139,14 @@
                 
                 // Remove player2 from formData if it's empty
                 formData = formData.filter(field => !(field.name === 'player2' && !field.value));
+                
+                // Add simulated date/time to form data if lockout is enabled
+                if ($('#applyLockout').is(':checked')) {
+                    let simulateDateTime = $('#simulateDateTime').val();
+                    if (simulateDateTime) {
+                        formData.push({ name: 'simulateDateTime', value: simulateDateTime });
+                    }
+                }
                 
                 $.ajax({
                     url: '/calculate',

@@ -2,6 +2,7 @@ import pandas as pd
 from typing import List, Dict, Tuple
 from dataclasses import dataclass
 from itertools import combinations
+from datetime import datetime
 
 @dataclass
 class Player:
@@ -34,9 +35,11 @@ def load_data(file_path: str) -> pd.DataFrame:
                       .str.replace('"', ''))
             df[col] = pd.to_numeric(df[col], errors='coerce')
     
-    # Ensure Round column exists
-    if 'Round' not in df.columns and file_path != 'teamlists.csv':  # Skip check for teamlists.csv
-        raise ValueError("Data must contain a 'Round' column")
+    # Ensure required columns exist
+    required_columns = ['Round', 'Team']  # Added 'Team' to required columns
+    for col in required_columns:
+        if col not in df.columns and file_path != 'teamlists.csv':
+            raise ValueError(f"Data must contain a '{col}' column")
     
     return df
 
@@ -281,7 +284,6 @@ def calculate_average_base(
 def print_players_by_rule_level(available_players: pd.DataFrame, consolidated_data: pd.DataFrame, maximize_base: bool = False) -> None:
     """
     Print players that satisfy each rule level, with their relevant stats.
-    If maximize_base is True, print top players by average base instead.
     """
     print("\n=== Players Satisfying Each Rule Level ===\n")
     rule_descriptions = {
@@ -339,6 +341,7 @@ def print_players_by_rule_level(available_players: pd.DataFrame, consolidated_da
                 
                 print(
                     f"Player: {player['Player']:<20} "
+                    f"Team: {player['Team']:<4} "  # Added Team to output
                     f"Position: {player['POS']:<5} "
                     f"Age: {player['Age']:<3} "
                     f"Current BPRE: {int(player['Base exceeds price premium']):>5} "
@@ -625,6 +628,7 @@ def create_player_dict(player):
     """Helper function to create consistent player dictionaries"""
     return {
         'name': player['Player'],
+        'team': player['Team'],  # Added team to player dictionary
         'position': player['POS'],
         'price': player['Price'],
         'total_base': player['Total base'],
@@ -653,6 +657,44 @@ def get_traded_out_positions(traded_out_players: List[str], consolidated_data: p
             positions.append(player_data.iloc[0]['POS'])
     return positions
 
+def get_locked_out_players(simulate_datetime: str, consolidated_data: pd.DataFrame) -> set:
+    """
+    Get the set of players who are locked out based on the simulated date/time.
+    """
+    if not simulate_datetime:
+        return set()
+    
+    # Parse the simulated date/time
+    simulate_dt = datetime.strptime(simulate_datetime, '%Y-%m-%dT%H:%M')
+    
+    # Define the fixtures
+    fixtures = [
+        ("2025-03-02 11:00", ["CAN", "WAR"]),
+        ("2025-03-02 15:30", ["PEN", "CRO"]),
+        ("2025-03-06 20:00", ["SYD", "BRI"]),
+        ("2025-03-07 18:00", ["WST", "NEW"]),
+        ("2025-03-07 20:05", ["DOL", "SOU"]),
+        ("2025-03-08 17:30", ["SGI", "CBY"]),
+        ("2025-03-08 19:35", ["MAN", "NQL"]),
+        ("2025-03-09 16:05", ["MEL", "SOU"]),
+    ]
+    
+    locked_out_teams = set()
+    for fixture_time, teams in fixtures:
+        fixture_dt = datetime.strptime(fixture_time, '%Y-%m-%d %H:%M')
+        if fixture_dt <= simulate_dt:
+            locked_out_teams.update(teams)
+    
+    # Use the Team column from the main data instead of teamlists.csv
+    locked_out_players = set()
+    latest_round_data = consolidated_data.sort_values('Round').groupby('Player').last().reset_index()
+    
+    for team in locked_out_teams:
+        team_players = latest_round_data[latest_round_data['Team'] == team]['Player'].tolist()
+        locked_out_players.update(team_players)
+    
+    return locked_out_players
+
 def calculate_trade_options(
     consolidated_data: pd.DataFrame,
     traded_out_players: List[str],
@@ -662,8 +704,15 @@ def calculate_trade_options(
     allowed_positions: List[str] = None,
     trade_type: str = 'likeForLike',
     min_games: int = 2,  # New parameter
-    team_list: List[str] = None  # Parameter to receive team list restriction
+    team_list: List[str] = None,  # Parameter to receive team list restriction
+    simulate_datetime: str = None,
+    apply_lockout: bool = False
 ) -> List[Dict]:
+    # Get locked out players if lockout restriction is applied
+    locked_out_players = set()
+    if apply_lockout:
+        locked_out_players = get_locked_out_players(simulate_datetime, consolidated_data)
+    
     # Get positions of traded out players for like-for-like trades
     traded_out_positions = (get_traded_out_positions(traded_out_players, consolidated_data) 
                           if trade_type == 'likeForLike' 
@@ -700,6 +749,13 @@ def calculate_trade_options(
         available_players = available_players[available_players['Player'].isin(team_list)]
         if available_players.empty:
             print("Warning: No players available after applying team list restriction")
+            return []
+    
+    # Apply lockout restriction if enabled
+    if apply_lockout:
+        available_players = available_players[~available_players['Player'].isin(locked_out_players)]
+        if available_players.empty:
+            print("Warning: No players available after applying lockout restriction")
             return []
     
     # Then filter players by allowed positions if specified
@@ -863,6 +919,12 @@ if __name__ == "__main__":
         
         traded_out_players = ["Player1", "Player2"]  # Example players to trade out
         
+        # Get lockout and simulation date/time preferences
+        apply_lockout = input("Apply lockout restriction? (yes/no): ").strip().lower() == 'yes'
+        simulate_datetime = None
+        if apply_lockout:
+            simulate_datetime = input("Enter simulated date/time (YYYY-MM-DDTHH:MM): ").strip()
+        
         print(f"\nCalculating trade options for trading out: {', '.join(traded_out_players)}")
         print(f"Strategy: {'Maximizing base stats' if maximize_base else 'Maximizing value (BPRE)' if not hybrid_approach else 'Hybrid approach (BPRE + Base stats)'}")
         if allowed_positions:
@@ -876,7 +938,9 @@ if __name__ == "__main__":
             maximize_base=maximize_base,
             hybrid_approach=hybrid_approach,
             max_options=10,
-            allowed_positions=allowed_positions
+            allowed_positions=allowed_positions,
+            simulate_datetime=simulate_datetime,
+            apply_lockout=apply_lockout
         )
         
         if options:

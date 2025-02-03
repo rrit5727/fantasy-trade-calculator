@@ -25,6 +25,7 @@ def prepare_trade_option(option: Dict[str, Any]) -> Dict[str, Any]:
         prepared_player = {
             'name': player.get('name', ''),
             'position': player.get('position', ''),
+            'team': player.get('team', ''),  
             'price': int(player.get('price', 0)),
             'total_base': float(player.get('total_base', 0)),
             'base_premium': int(float(player.get('base_premium', 0))),
@@ -98,13 +99,11 @@ def calculate():
         player1 = request.form['player1']
         player2 = request.form.get('player2')  # Use get to handle optional player2
         strategy = request.form['strategy']
-        
-        # Print the strategy to the console
-        print(f"Strategy selected: {strategy}")
-        
         trade_type = request.form['tradeType']
         allowed_positions = request.form.getlist('positions') if trade_type == 'positionalSwap' else []
         restrict_to_team_list = 'restrictToTeamList' in request.form
+        apply_lockout = 'applyLockout' in request.form
+        simulate_datetime = request.form.get('simulateDateTime')
 
         # Load consolidated data
         file_path = "NRL_stats.xlsx"
@@ -134,7 +133,9 @@ def calculate():
             max_options=10,
             allowed_positions=allowed_positions,
             trade_type=trade_type,
-            team_list=team_list  # Pass the team list to the function
+            team_list=team_list,
+            simulate_datetime=simulate_datetime,
+            apply_lockout=apply_lockout
         )
 
         # Prepare options for JSON response
