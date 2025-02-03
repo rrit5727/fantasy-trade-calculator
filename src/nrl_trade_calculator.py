@@ -35,7 +35,7 @@ def load_data(file_path: str) -> pd.DataFrame:
             df[col] = pd.to_numeric(df[col], errors='coerce')
     
     # Ensure Round column exists
-    if 'Round' not in df.columns:
+    if 'Round' not in df.columns and file_path != 'teamlists.csv':  # Skip check for teamlists.csv
         raise ValueError("Data must contain a 'Round' column")
     
     return df
@@ -662,7 +662,7 @@ def calculate_trade_options(
     allowed_positions: List[str] = None,
     trade_type: str = 'likeForLike',
     min_games: int = 2,  # New parameter
-    team_list: List[str] = None  # New parameter
+    team_list: List[str] = None  # Parameter to receive team list restriction
 ) -> List[Dict]:
     # Get positions of traded out players for like-for-like trades
     traded_out_positions = (get_traded_out_positions(traded_out_players, consolidated_data) 
@@ -695,13 +695,16 @@ def calculate_trade_options(
     available_players = (recent_players_data[~recent_players_data['Player'].isin(traded_out_players)]
                         .groupby('Player').last().reset_index())
     
-    # Filter players by allowed positions if specified
-    if positions_to_use:
-        available_players = available_players[available_players['POS'].isin(positions_to_use)]
-    
-    # Filter players by team list if specified
+    # Apply team list restriction first if enabled
     if team_list:
         available_players = available_players[available_players['Player'].isin(team_list)]
+        if available_players.empty:
+            print("Warning: No players available after applying team list restriction")
+            return []
+    
+    # Then filter players by allowed positions if specified
+    if positions_to_use:
+        available_players = available_players[available_players['POS'].isin(positions_to_use)]
     
     # Initialize consecutive_good_weeks column
     available_players['consecutive_good_weeks'] = 0

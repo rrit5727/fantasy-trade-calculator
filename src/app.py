@@ -113,7 +113,7 @@ def calculate():
         # Load team list data if restriction is enabled
         team_list = None
         if restrict_to_team_list:
-            team_list_path = "team_lists.xlsx"
+            team_list_path = "teamlists.csv"
             team_list = load_data(team_list_path)['Player'].unique().tolist()
 
         # Determine optimization strategy
