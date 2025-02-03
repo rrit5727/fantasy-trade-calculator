@@ -382,7 +382,7 @@ def generate_comprehensive_trade_options(
     """
     Generate trade combinations based on selected optimization strategy while ensuring
     position requirements are met for like-for-like trades.
-    Updated to handle dual positions.
+    Updated to ensure traded-in players cover at least one position of each traded-out player.
     """
     valid_combinations = []
     used_players = set()
@@ -441,8 +441,10 @@ def generate_comprehensive_trade_options(
                             second_positions.append(second_player['POS2'])
                         
                         # Check if positions match traded out positions
-                        all_positions = set(first_positions + second_positions)
-                        if not all(pos in all_positions for pos in traded_out_positions):
+                        # Ensure one player covers at least one position of the first traded-out player
+                        # and the other player covers at least one position of the second traded-out player
+                        if not (any(pos in first_positions for pos in traded_out_positions[:len(traded_out_positions)//2]) and
+                                any(pos in second_positions for pos in traded_out_positions[len(traded_out_positions)//2:])):
                             continue
                             
                         total_price = first_player['Price'] + second_player['Price']
