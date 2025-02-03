@@ -695,6 +695,40 @@ def get_locked_out_players(simulate_datetime: str, consolidated_data: pd.DataFra
     
     return locked_out_players
 
+def is_player_locked(player_name: str, consolidated_data: pd.DataFrame, simulate_datetime: str) -> bool:
+    """
+    Check if a player is locked based on the simulated date/time.
+    """
+    if not simulate_datetime:
+        return False
+    
+    # Parse the simulated date/time
+    simulate_dt = datetime.strptime(simulate_datetime, '%Y-%m-%dT%H:%M')
+    
+    # Define the fixtures
+    fixtures = [
+        ("2025-03-02 11:00", ["CAN", "WAR"]),
+        ("2025-03-02 15:30", ["PEN", "CRO"]),
+        ("2025-03-06 20:00", ["SYD", "BRI"]),
+        ("2025-03-07 18:00", ["WST", "NEW"]),
+        ("2025-03-07 20:05", ["DOL", "SOU"]),
+        ("2025-03-08 17:30", ["SGI", "CBY"]),
+        ("2025-03-08 19:35", ["MAN", "NQL"]),
+        ("2025-03-09 16:05", ["MEL", "SOU"]),
+    ]
+    
+    locked_out_teams = set()
+    for fixture_time, teams in fixtures:
+        fixture_dt = datetime.strptime(fixture_time, '%Y-%m-%d %H:%M')
+        if fixture_dt <= simulate_dt:
+            locked_out_teams.update(teams)
+    
+    # Use the Team column from the main data instead of teamlists.csv
+    latest_round_data = consolidated_data.sort_values('Round').groupby('Player').last().reset_index()
+    player_team = latest_round_data[latest_round_data['Player'] == player_name]['Team'].values[0]
+    
+    return player_team in locked_out_teams
+
 def calculate_trade_options(
     consolidated_data: pd.DataFrame,
     traded_out_players: List[str],

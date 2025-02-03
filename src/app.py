@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify
-from nrl_trade_calculator import calculate_trade_options, load_data, assign_priority_level
+from nrl_trade_calculator import calculate_trade_options, load_data, assign_priority_level, is_player_locked
 from typing import List, Dict, Any
 import traceback
 import pandas as pd
@@ -33,7 +33,6 @@ def prepare_trade_option(option: Dict[str, Any]) -> Dict[str, Any]:
             'avg_base': float(player.get('avg_base', 0)) if 'avg_base' in player else 0.0
         }
         
-        # Only include priority_level if it exists
         if 'priority_level' in player:
             prepared_player['priority_level'] = int(player['priority_level'])
             
@@ -45,10 +44,29 @@ def prepare_trade_option(option: Dict[str, Any]) -> Dict[str, Any]:
 def index():
     return render_template('index.html')
 
+@app.route('/check_player_lockout', methods=['POST'])
+def check_player_lockout():
+    try:
+        player_name = request.form['player_name']
+        simulate_datetime = request.form.get('simulateDateTime')
+        
+        file_path = "NRL_stats.xlsx"
+        consolidated_data = load_data(file_path)
+        
+        is_locked = is_player_locked(player_name, consolidated_data, simulate_datetime)
+        
+        return jsonify({
+            'is_locked': is_locked
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'error': str(e)
+        }), 500
+
 def simulate_rule_levels(consolidated_data: pd.DataFrame, rounds: List[int]) -> None:
     player_name = consolidated_data['Player'].unique()[0]  # Assuming the first player in the data
 
-    # Rule descriptions
     rule_descriptions = {
         1: "BPRE >= 14 for last 3 weeks",
         2: "BPRE >= 21 for last 2 weeks",
@@ -78,7 +96,6 @@ def simulate_rule_levels(consolidated_data: pd.DataFrame, rounds: List[int]) -> 
     }
 
     for round_num in rounds:
-        # Get the last 4 rounds up to the current round
         recent_rounds = sorted(consolidated_data['Round'].unique())
         recent_rounds = [r for r in recent_rounds if r <= round_num][-4:]
         cumulative_data = consolidated_data[consolidated_data['Round'].isin(recent_rounds)]
@@ -95,9 +112,8 @@ def simulate_rule_levels(consolidated_data: pd.DataFrame, rounds: List[int]) -> 
 @app.route('/calculate', methods=['POST'])
 def calculate():
     try:
-        # Get data from the form
         player1 = request.form['player1']
-        player2 = request.form.get('player2')  # Use get to handle optional player2
+        player2 = request.form.get('player2')
         strategy = request.form['strategy']
         trade_type = request.form['tradeType']
         allowed_positions = request.form.getlist('positions') if trade_type == 'positionalSwap' else []
@@ -105,26 +121,33 @@ def calculate():
         apply_lockout = 'applyLockout' in request.form
         simulate_datetime = request.form.get('simulateDateTime')
 
-        # Load consolidated data
         file_path = "NRL_stats.xlsx"
         consolidated_data = load_data(file_path)
 
-        # Load team list data if restriction is enabled
         team_list = None
         if restrict_to_team_list:
             team_list_path = "teamlists.csv"
             team_list = load_data(team_list_path)['Player'].unique().tolist()
 
-        # Determine optimization strategy
         maximize_base = (strategy == '2')
         hybrid_approach = (strategy == '3')
 
-        # Create list of traded out players
         traded_out_players = [player1]
         if player2:
             traded_out_players.append(player2)
 
-        # Calculate trade options
+        # Validate lockout status for traded out players
+        if apply_lockout:
+            locked_players = []
+            for player in traded_out_players:
+                if is_player_locked(player, consolidated_data, simulate_datetime):
+                    locked_players.append(player)
+            
+            if locked_players:
+                return jsonify({
+                    'error': f"{' and '.join(locked_players)}'s lockout has expired"
+                }), 400
+
         options = calculate_trade_options(
             consolidated_data=consolidated_data,
             traded_out_players=traded_out_players,
@@ -138,13 +161,11 @@ def calculate():
             apply_lockout=apply_lockout
         )
 
-        # Prepare options for JSON response
         prepared_options = [prepare_trade_option(option) for option in options]
 
         return jsonify(prepared_options)
 
     except Exception as e:
-        # Log the full error traceback for debugging
         error_traceback = traceback.format_exc()
         print(f"Error occurred: {error_traceback}")
         
@@ -155,36 +176,29 @@ def calculate():
 @app.route('/players', methods=['GET'])
 def get_players():
     try:
-        # Load consolidated data
         file_path = "NRL_stats.xlsx"
         consolidated_data = load_data(file_path)
-        
-        # Extract unique player names
         player_names = consolidated_data['Player'].unique().tolist()
-        
         return jsonify(player_names)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 if __name__ == "__main__":
     try:
-        # Prompt user for action
         while True:
             choice = input("\nDo you want to:\n1. Run the ordinary trade calculator\n2. Run rule set simulation for 1 player\nEnter 1 or 2: ")
             if choice in ['1', '2']:
                 break
             print("Invalid input. Please enter 1 or 2.")
 
-        # Load the appropriate data file based on user choice
         file_path = "NRL_stats.xlsx" if choice == '1' else "player_simulation.xlsx"
         consolidated_data = load_data(file_path)
         print(f"Successfully loaded data for {consolidated_data['Round'].nunique()} rounds")
 
         if choice == '2':
-            rounds = list(range(1, int(consolidated_data['Round'].max()) + 1))  # Simulate for all rounds
+            rounds = list(range(1, int(consolidated_data['Round'].max()) + 1))
             simulate_rule_levels(consolidated_data, rounds)
         else:
-            # Run the ordinary trade calculator
             app.run(debug=True)
 
     except FileNotFoundError:
