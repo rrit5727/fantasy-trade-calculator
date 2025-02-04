@@ -402,6 +402,7 @@ def generate_comprehensive_trade_options(
                 if flat_players[i]['Player'] in used_players:
                     continue
                     
+                valid_combo_found = False
                 for j in range(i + 1, len(flat_players)):
                     if flat_players[j]['Player'] in used_players:
                         continue
@@ -421,11 +422,12 @@ def generate_comprehensive_trade_options(
                         valid_combinations.append(combo)
                         used_players.add(first_player['Player'])
                         used_players.add(second_player['Player'])
-                        if len(valid_combinations) >= max_options:
-                            break
+                        valid_combo_found = True
+                        break  # Exit j loop after finding a valid pair
                 
-                if len(valid_combinations) >= max_options:
-                    break
+                if valid_combo_found:
+                    if len(valid_combinations) >= max_options:
+                        break
                     
     elif hybrid_approach:
         value_players = []
