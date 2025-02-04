@@ -388,6 +388,10 @@ def generate_comprehensive_trade_options(
     used_players = set()
     
     if trade_type == 'likeForLike' and traded_out_positions:
+        # Split traded_out_positions into positions for each traded-out player
+        first_player_positions = traded_out_positions[:len(traded_out_positions)//2]
+        second_player_positions = traded_out_positions[len(traded_out_positions)//2:]
+        
         # For like-for-like trades, filter players by position first
         position_filtered_groups = {}
         for level in priority_groups:
@@ -432,19 +436,18 @@ def generate_comprehensive_trade_options(
                         second_player = flat_players[j]
                         
                         # Get all positions for both players
-                        first_positions = [first_player['POS1']]
+                        first_player_positions_in = [first_player['POS1']]
                         if 'POS2' in first_player and pd.notna(first_player['POS2']):
-                            first_positions.append(first_player['POS2'])
+                            first_player_positions_in.append(first_player['POS2'])
                             
-                        second_positions = [second_player['POS1']]
+                        second_player_positions_in = [second_player['POS1']]
                         if 'POS2' in second_player and pd.notna(second_player['POS2']):
-                            second_positions.append(second_player['POS2'])
+                            second_player_positions_in.append(second_player['POS2'])
                         
-                        # Check if positions match traded out positions
-                        # Ensure one player covers at least one position of the first traded-out player
-                        # and the other player covers at least one position of the second traded-out player
-                        if not (any(pos in first_positions for pos in traded_out_positions[:len(traded_out_positions)//2]) and
-                                any(pos in second_positions for pos in traded_out_positions[len(traded_out_positions)//2:])):
+                        # Check if the first player covers at least one position of the first traded-out player
+                        # and the second player covers at least one position of the second traded-out player
+                        if not (any(pos in first_player_positions_in for pos in first_player_positions) and
+                                any(pos in second_player_positions_in for pos in second_player_positions)):
                             continue
                             
                         total_price = first_player['Price'] + second_player['Price']
@@ -513,7 +516,7 @@ def generate_comprehensive_trade_options(
                         continue
                         
                     remaining_salary = salary_freed - value_player['Price']
-                    needed_position = [pos for pos in traded_out_positions if pos != value_player['POS1']][0]
+                    needed_position = [pos for pos in second_player_positions if pos != value_player['POS1']][0]
                     
                     for base_player in base_players:
                         if (base_player['Player'] not in used_players and 
@@ -574,7 +577,7 @@ def generate_comprehensive_trade_options(
                             continue
                             
                         valid_combo_found = False
-                        needed_position = [pos for pos in traded_out_positions if pos != first_player['POS1']]
+                        needed_position = [pos for pos in second_player_positions if pos != first_player['POS1']]
                         
                         # Try pairing with other players from same level with matching position
                         for j in range(i + 1, len(players_in_level)):
