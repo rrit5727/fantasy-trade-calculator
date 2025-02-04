@@ -18,7 +18,6 @@ class Player:
 def load_data(file_path: str) -> pd.DataFrame:
     """
     Load data from a single file containing multiple rounds.
-    Updated to handle POS1 and POS2 columns.
     """
     if file_path.endswith('.csv'):
         df = pd.read_csv(file_path)
@@ -37,7 +36,7 @@ def load_data(file_path: str) -> pd.DataFrame:
             df[col] = pd.to_numeric(df[col], errors='coerce')
     
     # Ensure required columns exist
-    required_columns = ['Round', 'Team', 'POS1']  # Updated to require POS1
+    required_columns = ['Round', 'Team']  # Added 'Team' to required columns
     for col in required_columns:
         if col not in df.columns and file_path != 'teamlists.csv':
             raise ValueError(f"Data must contain a '{col}' column")
@@ -88,15 +87,10 @@ def check_rule_condition(
 ) -> bool:
     """
     Check if a player meets the specified rule conditions.
-    Updated to handle dual positions.
+    Exclude Mid/EDG players who are 29 years or older.
     """
-    # Get all positions for the player
-    player_positions = [player_data['POS1']]
-    if 'POS2' in player_data and pd.notna(player_data['POS2']):
-        player_positions.append(player_data['POS2'])
-    
-    # Check if any of player's positions are MID or EDG and age >= 29
-    if any(pos in ['MID', 'EDG'] for pos in player_positions) and player_data['Age'] >= 29:
+    # Exclude Mid/EDG players who are 29 years or older
+    if player_data['POS'] in ['MID', 'EDG'] and player_data['Age'] >= 29:
         return False
     
     # Check base premium threshold for current week
@@ -121,8 +115,7 @@ def check_rule_condition(
     
     if position_requirement:
         positions = position_requirement.split('|')
-        # Check if any of the player's positions match the requirement
-        meets_position = any(pos in positions for pos in player_positions)
+        meets_position = player_data['POS'] in positions
     else:
         meets_position = True
         
@@ -250,12 +243,7 @@ def calculate_average_bpre(
     
     # Exclude Mid/EDG players who are 29 years or older
     if not player_data.empty:
-        # Check both POS1 and POS2 columns
-        positions = [player_data.iloc[0]['POS1']]
-        if 'POS2' in player_data.columns and pd.notna(player_data.iloc[0]['POS2']):
-            positions.append(player_data.iloc[0]['POS2'])
-            
-        if any(pos in ['MID', 'EDG'] for pos in positions) and player_data.iloc[0]['Age'] >= 29:
+        if player_data.iloc[0]['POS'] in ['MID', 'EDG'] and player_data.iloc[0]['Age'] >= 29:
             return 0.0  # Exclude these players
     
     recent_data = player_data.head(lookback_weeks)
@@ -351,16 +339,10 @@ def print_players_by_rule_level(available_players: pd.DataFrame, consolidated_da
                 bpre_by_round = player_data[['Round', 'Base exceeds price premium']].dropna()
                 bpre_values = ", ".join([f"round {int(row['Round'])} BPRE: {int(row['Base exceeds price premium'])}" for _, row in bpre_by_round.iterrows()])
                 
-                # Use POS1 instead of POS
-                position = player['POS1']
-                # Include POS2 if it exists
-                if 'POS2' in player and pd.notna(player['POS2']):
-                    position = f"{position}/{player['POS2']}"
-                
                 print(
                     f"Player: {player['Player']:<20} "
-                    f"Team: {player['Team']:<4} "
-                    f"Position: {position:<8} "  # Increased width to accommodate dual positions
+                    f"Team: {player['Team']:<4} "  # Added Team to output
+                    f"Position: {player['POS']:<5} "
                     f"Age: {player['Age']:<3} "
                     f"Current BPRE: {int(player['Base exceeds price premium']):>5} "
                     f"Avg BPRE: {int(player['avg_bpre']):>5} "
@@ -382,23 +364,17 @@ def generate_comprehensive_trade_options(
     """
     Generate trade combinations based on selected optimization strategy while ensuring
     position requirements are met for like-for-like trades.
-    Updated to ensure traded-in players cover at least one position of each traded-out player.
     """
     valid_combinations = []
     used_players = set()
     
     if trade_type == 'likeForLike' and traded_out_positions:
-        # Split traded_out_positions into positions for each traded-out player
-        first_player_positions = traded_out_positions[:len(traded_out_positions)//2]
-        second_player_positions = traded_out_positions[len(traded_out_positions)//2:]
-        
         # For like-for-like trades, filter players by position first
         position_filtered_groups = {}
         for level in priority_groups:
             position_filtered_groups[level] = [
                 player for player in priority_groups[level]
-                if (player['POS1'] in traded_out_positions or 
-                    ('POS2' in player and pd.notna(player['POS2']) and player['POS2'] in traded_out_positions))
+                if player['POS'] in traded_out_positions
             ]
     else:
         position_filtered_groups = priority_groups
@@ -435,19 +411,9 @@ def generate_comprehensive_trade_options(
                         first_player = flat_players[i]
                         second_player = flat_players[j]
                         
-                        # Get all positions for both players
-                        first_player_positions_in = [first_player['POS1']]
-                        if 'POS2' in first_player and pd.notna(first_player['POS2']):
-                            first_player_positions_in.append(first_player['POS2'])
-                            
-                        second_player_positions_in = [second_player['POS1']]
-                        if 'POS2' in second_player and pd.notna(second_player['POS2']):
-                            second_player_positions_in.append(second_player['POS2'])
-                        
-                        # Check if the first player covers at least one position of the first traded-out player
-                        # and the second player covers at least one position of the second traded-out player
-                        if not (any(pos in first_player_positions_in for pos in first_player_positions) and
-                                any(pos in second_player_positions_in for pos in second_player_positions)):
+                        # Check if positions match traded out positions
+                        positions = {first_player['POS'], second_player['POS']}
+                        if positions != set(traded_out_positions):
                             continue
                             
                         total_price = first_player['Price'] + second_player['Price']
@@ -456,11 +422,7 @@ def generate_comprehensive_trade_options(
                             valid_combinations.append(combo)
                             used_players.add(first_player['Player'])
                             used_players.add(second_player['Player'])
-                            if len(valid_combinations) >= max_options:
-                                break
-                    
-                    if len(valid_combinations) >= max_options:
-                        break
+                            break
             else:
                 # Original logic for non-like-for-like trades
                 for i in range(len(flat_players)):
@@ -480,12 +442,8 @@ def generate_comprehensive_trade_options(
                             valid_combinations.append(combo)
                             used_players.add(first_player['Player'])
                             used_players.add(second_player['Player'])
-                            if len(valid_combinations) >= max_options:
-                                break
-                    
-                    if len(valid_combinations) >= max_options:
-                        break
-    
+                            break
+                        
     elif hybrid_approach:
         value_players = []
         for level in sorted(position_filtered_groups.keys()):
@@ -516,13 +474,12 @@ def generate_comprehensive_trade_options(
                         continue
                         
                     remaining_salary = salary_freed - value_player['Price']
-                    needed_position = [pos for pos in second_player_positions if pos != value_player['POS1']][0]
+                    needed_position = [pos for pos in traded_out_positions if pos != value_player['POS']][0]
                     
                     for base_player in base_players:
                         if (base_player['Player'] not in used_players and 
                             base_player['Player'] != value_player['Player'] and 
-                            (base_player['POS1'] == needed_position or 
-                             ('POS2' in base_player and base_player['POS2'] == needed_position)) and
+                            base_player['POS'] == needed_position and
                             base_player['Price'] <= remaining_salary):
                             
                             combo = create_combination([value_player, base_player], 
@@ -554,7 +511,7 @@ def generate_comprehensive_trade_options(
                             break
     else:  # maximize_value - strict rule level ordering
         priority_levels = sorted(position_filtered_groups.keys())
-
+        
         for level in priority_levels:
             players_in_level = position_filtered_groups[level]
             players_in_level.sort(key=lambda x: x['avg_bpre'], reverse=True)
@@ -577,14 +534,13 @@ def generate_comprehensive_trade_options(
                             continue
                             
                         valid_combo_found = False
-                        needed_position = [pos for pos in second_player_positions if pos != first_player['POS1']]
+                        needed_position = [pos for pos in traded_out_positions if pos != first_player['POS']]
                         
                         # Try pairing with other players from same level with matching position
                         for j in range(i + 1, len(players_in_level)):
                             second_player = players_in_level[j]
                             if (second_player['Player'] not in used_players and 
-                                (second_player['POS1'] in needed_position or 
-                                 ('POS2' in second_player and second_player['POS2'] in needed_position))):
+                                second_player['POS'] in needed_position):
                                 
                                 total_price = first_player['Price'] + second_player['Price']
                                 if total_price <= salary_freed:
@@ -601,8 +557,7 @@ def generate_comprehensive_trade_options(
                             for next_level in priority_levels[priority_levels.index(level)+1:]:
                                 for second_player in position_filtered_groups[next_level]:
                                     if (second_player['Player'] not in used_players and 
-                                        (second_player['POS1'] in needed_position or 
-                                         ('POS2' in second_player and second_player['POS2'] in needed_position))):
+                                        second_player['POS'] in needed_position):
                                         
                                         total_price = first_player['Price'] + second_player['Price']
                                         if total_price <= salary_freed:
@@ -670,12 +625,11 @@ def create_combination(players, total_price, salary_freed):
     }
 
 def create_player_dict(player):
-    """Helper function to create consistent player dictionaries.
-    Updated to include both positions."""
-    player_dict = {
+    """Helper function to create consistent player dictionaries"""
+    return {
         'name': player['Player'],
-        'team': player['Team'],
-        'position': player['POS1'],  # Primary position
+        'team': player['Team'],  # Added team to player dictionary
+        'position': player['POS'],
         'price': player['Price'],
         'total_base': player['Total base'],
         'base_premium': player['Base exceeds price premium'],
@@ -684,34 +638,24 @@ def create_player_dict(player):
         'avg_bpre': player['avg_bpre'],
         'avg_base': player['avg_base']
     }
-    
-    # Add secondary position if it exists
-    if 'POS2' in player and pd.notna(player['POS2']):
-        player_dict['position2'] = player['POS2']
-    
-    return player_dict
 
 def get_traded_out_positions(traded_out_players: List[str], consolidated_data: pd.DataFrame) -> List[str]:
     """
-    Get all positions of the players being traded out (including secondary positions).
+    Get the positions of the players being traded out.
     
     Parameters:
     traded_out_players (List[str]): List of player names being traded out
     consolidated_data (pd.DataFrame): Full dataset containing player information
     
     Returns:
-    List[str]: List of all positions corresponding to traded out players
+    List[str]: List of positions corresponding to traded out players
     """
     positions = []
     for player in traded_out_players:
         player_data = consolidated_data[consolidated_data['Player'] == player].sort_values('Round', ascending=False)
         if not player_data.empty:
-            # Add primary position
-            positions.append(player_data.iloc[0]['POS1'])
-            # Add secondary position if it exists
-            if 'POS2' in player_data.columns and pd.notna(player_data.iloc[0]['POS2']):
-                positions.append(player_data.iloc[0]['POS2'])
-    return list(set(positions))  # Remove duplicates
+            positions.append(player_data.iloc[0]['POS'])
+    return positions
 
 def get_locked_out_players(simulate_datetime: str, consolidated_data: pd.DataFrame) -> set:
     """
@@ -1063,5 +1007,3 @@ if __name__ == "__main__":
         print("Error:", str(e))
     except Exception as e:
         print("An error occurred:", str(e))
-
-# comment
