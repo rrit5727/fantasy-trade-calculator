@@ -36,10 +36,14 @@ def load_data(file_path: str) -> pd.DataFrame:
             df[col] = pd.to_numeric(df[col], errors='coerce')
     
     # Ensure required columns exist
-    required_columns = ['Round', 'Team']  # Added 'Team' to required columns
+    required_columns = ['Round', 'Team', 'POS1']  # Added POS1 to required columns
     for col in required_columns:
         if col not in df.columns and file_path != 'teamlists.csv':
             raise ValueError(f"Data must contain a '{col}' column")
+    
+    # Handle POS2 column if present
+    if 'POS2' not in df.columns:
+        df['POS2'] = None  # Create empty POS2 column if not present
     
     return df
 
@@ -90,7 +94,7 @@ def check_rule_condition(
     Exclude Mid/EDG players who are 29 years or older.
     """
     # Exclude Mid/EDG players who are 29 years or older
-    if player_data['POS'] in ['MID', 'EDG'] and player_data['Age'] >= 29:
+    if player_data['POS1'] in ['MID', 'EDG'] and player_data['Age'] >= 29:
         return False
     
     # Check base premium threshold for current week
@@ -115,7 +119,7 @@ def check_rule_condition(
     
     if position_requirement:
         positions = position_requirement.split('|')
-        meets_position = player_data['POS'] in positions
+        meets_position = player_data['POS1'] in positions
     else:
         meets_position = True
         
@@ -243,7 +247,7 @@ def calculate_average_bpre(
     
     # Exclude Mid/EDG players who are 29 years or older
     if not player_data.empty:
-        if player_data.iloc[0]['POS'] in ['MID', 'EDG'] and player_data.iloc[0]['Age'] >= 29:
+        if player_data.iloc[0]['POS1'] in ['MID', 'EDG'] and player_data.iloc[0]['Age'] >= 29:
             return 0.0  # Exclude these players
     
     recent_data = player_data.head(lookback_weeks)
@@ -342,7 +346,7 @@ def print_players_by_rule_level(available_players: pd.DataFrame, consolidated_da
                 print(
                     f"Player: {player['Player']:<20} "
                     f"Team: {player['Team']:<4} "  # Added Team to output
-                    f"Position: {player['POS']:<5} "
+                    f"Position: {player['POS1']:<5} "
                     f"Age: {player['Age']:<3} "
                     f"Current BPRE: {int(player['Base exceeds price premium']):>5} "
                     f"Avg BPRE: {int(player['avg_bpre']):>5} "
@@ -374,7 +378,8 @@ def generate_comprehensive_trade_options(
         for level in priority_groups:
             position_filtered_groups[level] = [
                 player for player in priority_groups[level]
-                if player['POS'] in traded_out_positions
+                if player['POS1'] in traded_out_positions or 
+                (pd.notna(player['POS2']) and player['POS2'] in traded_out_positions)
             ]
     else:
         position_filtered_groups = priority_groups
@@ -412,8 +417,13 @@ def generate_comprehensive_trade_options(
                     
                     # Check positions if traded_out_positions is specified
                     if traded_out_positions:
-                        positions = {first_player['POS'], second_player['POS']}
-                        if positions != set(traded_out_positions):
+                        # Collect all positions (POS1 and POS2) for both players
+                        combined_positions = set()
+                        for player in [first_player, second_player]:
+                            combined_positions.add(player['POS1'])
+                            if pd.notna(player['POS2']):
+                                combined_positions.add(player['POS2'])
+                        if not set(traded_out_positions).issubset(combined_positions):
                             continue
                     
                     total_price = first_player['Price'] + second_player['Price']
@@ -460,8 +470,9 @@ def generate_comprehensive_trade_options(
                 remaining_salary = salary_freed - value_player['Price']
                 
                 if traded_out_positions:
-                    needed_position = [pos for pos in traded_out_positions if pos != value_player['POS']][0]
-                    filtered_base_players = [p for p in base_players if p['POS'] == needed_position]
+                    needed_position = [pos for pos in traded_out_positions if pos != value_player['POS1']][0]
+                    filtered_base_players = [p for p in base_players if p['POS1'] == needed_position or 
+                                            (pd.notna(p['POS2']) and p['POS2'] == needed_position)]
                 else:
                     filtered_base_players = base_players
                 
@@ -507,8 +518,9 @@ def generate_comprehensive_trade_options(
                     valid_combo_found = False
                     
                     if traded_out_positions:
-                        needed_position = [pos for pos in traded_out_positions if pos != first_player['POS']][0]
-                        remaining_players = [p for p in players_in_level[i+1:] if p['POS'] == needed_position]
+                        needed_position = [pos for pos in traded_out_positions if pos != first_player['POS1']][0]
+                        remaining_players = [p for p in players_in_level[i+1:] if p['POS1'] == needed_position or 
+                                            (pd.notna(p['POS2']) and p['POS2'] == needed_position)]
                     else:
                         remaining_players = players_in_level[i+1:]
                     
@@ -530,7 +542,8 @@ def generate_comprehensive_trade_options(
                         for next_level in priority_levels[priority_levels.index(level)+1:]:
                             if traded_out_positions:
                                 next_level_players = [p for p in position_filtered_groups[next_level] 
-                                                    if p['POS'] == needed_position]
+                                                    if p['POS1'] == needed_position or 
+                                                    (pd.notna(p['POS2']) and p['POS2'] == needed_position)]
                             else:
                                 next_level_players = position_filtered_groups[next_level]
                             
@@ -574,7 +587,7 @@ def create_player_dict(player):
     return {
         'name': player['Player'],
         'team': player['Team'],  # Added team to player dictionary
-        'position': player['POS'],
+        'position': player['POS1'],
         'price': player['Price'],
         'total_base': player['Total base'],
         'base_premium': player['Base exceeds price premium'],
@@ -599,7 +612,7 @@ def get_traded_out_positions(traded_out_players: List[str], consolidated_data: p
     for player in traded_out_players:
         player_data = consolidated_data[consolidated_data['Player'] == player].sort_values('Round', ascending=False)
         if not player_data.empty:
-            positions.append(player_data.iloc[0]['POS'])
+            positions.append(player_data.iloc[0]['POS1'])
     return positions
 
 def get_locked_out_players(simulate_datetime: str, consolidated_data: pd.DataFrame) -> set:
@@ -741,7 +754,16 @@ def calculate_trade_options(
     
     # Filter players by allowed positions if specified
     if positions_to_use:
-        available_players = available_players[available_players['POS'].isin(positions_to_use)]
+        if trade_type == 'positionalSwap':
+            # Check both POS1 and POS2 for allowed positions
+            mask = (
+                available_players['POS1'].isin(positions_to_use) |
+                available_players['POS2'].fillna('').isin(positions_to_use)
+            )
+            available_players = available_players[mask]
+        else:
+            # Like-for-like uses only POS1
+            available_players = available_players[available_players['POS1'].isin(positions_to_use)]
         if available_players.empty:
             print("Warning: No players available with selected positions")
             return []
