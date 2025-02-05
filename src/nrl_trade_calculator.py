@@ -415,9 +415,8 @@ def generate_comprehensive_trade_options(
                     first_player = flat_players[i]
                     second_player = flat_players[j]
                     
-                    # Check positions if traded_out_positions is specified
-                    if traded_out_positions:
-                        # Collect all positions (POS1 and POS2) for both players
+                    # Check positions if traded_out_positions is specified and requires coverage
+                    if traded_out_positions and (trade_type == 'likeForLike' or (trade_type == 'positionalSwap' and len(traded_out_positions) == 2)):
                         combined_positions = set()
                         for player in [first_player, second_player]:
                             combined_positions.add(player['POS1'])
@@ -469,7 +468,8 @@ def generate_comprehensive_trade_options(
                     
                 remaining_salary = salary_freed - value_player['Price']
                 
-                if traded_out_positions:
+                # Only apply position filtering if required by trade type
+                if traded_out_positions and (trade_type == 'likeForLike' or (trade_type == 'positionalSwap' and len(traded_out_positions) == 2)):
                     needed_position = [pos for pos in traded_out_positions if pos != value_player['POS1']][0]
                     filtered_base_players = [p for p in base_players if p['POS1'] == needed_position or 
                                             (pd.notna(p['POS2']) and p['POS2'] == needed_position)]
@@ -517,7 +517,8 @@ def generate_comprehensive_trade_options(
                         
                     valid_combo_found = False
                     
-                    if traded_out_positions:
+                    # Apply position filtering only if required by trade type
+                    if traded_out_positions and (trade_type == 'likeForLike' or (trade_type == 'positionalSwap' and len(traded_out_positions) == 2)):
                         needed_position = [pos for pos in traded_out_positions if pos != first_player['POS1']][0]
                         remaining_players = [p for p in players_in_level[i+1:] if p['POS1'] == needed_position or 
                                             (pd.notna(p['POS2']) and p['POS2'] == needed_position)]
@@ -540,7 +541,9 @@ def generate_comprehensive_trade_options(
                     if not valid_combo_found and first_player['Player'] not in used_players:
                         # Try next levels if no valid combination found in current level
                         for next_level in priority_levels[priority_levels.index(level)+1:]:
-                            if traded_out_positions:
+                            # Apply position filtering only if required by trade type
+                            if traded_out_positions and (trade_type == 'likeForLike' or (trade_type == 'positionalSwap' and len(traded_out_positions) == 2)):
+                                needed_position = [pos for pos in traded_out_positions if pos != first_player['POS1']][0]
                                 next_level_players = [p for p in position_filtered_groups[next_level] 
                                                     if p['POS1'] == needed_position or 
                                                     (pd.notna(p['POS2']) and p['POS2'] == needed_position)]
