@@ -442,7 +442,7 @@ def generate_comprehensive_trade_options(
         value_players = []
         for level in sorted(position_filtered_groups.keys()):
             level_players = position_filtered_groups[level]
-            level_players.sort(key=lambda x: x['avg_bpre'], reverse=True)
+            level_players.sort(key=lambda x: (x['avg_bpre'], x['Base exceeds price premium']), reverse=True)
             value_players.extend(level_players)
         
         base_players = []
@@ -497,7 +497,8 @@ def generate_comprehensive_trade_options(
         
         for level in priority_levels:
             players_in_level = position_filtered_groups[level]
-            players_in_level.sort(key=lambda x: x['avg_bpre'], reverse=True)
+            # Update sorting to use both avg_bpre and current BPRE
+            players_in_level.sort(key=lambda x: (x['avg_bpre'], x['Base exceeds price premium']), reverse=True)
             
             if num_players_needed == 1:
                 for player in players_in_level:
