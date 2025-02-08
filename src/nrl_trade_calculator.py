@@ -20,6 +20,12 @@ class Player:
 def load_data(file_path: str) -> pd.DataFrame:
     """
     Load data from a single file containing multiple rounds.
+    
+    Parameters:
+    file_path (str): Path to the data file
+    
+    Returns:
+    pd.DataFrame: Loaded and cleaned data
     """
     if file_path.endswith('.csv'):
         df = pd.read_csv(file_path)
@@ -37,17 +43,19 @@ def load_data(file_path: str) -> pd.DataFrame:
                       .str.replace('"', ''))
             df[col] = pd.to_numeric(df[col], errors='coerce')
     
-    # Ensure required columns exist
-    required_columns = ['Round', 'Team', 'POS1']  # Added POS1 to required columns
-    for col in required_columns:
-        if col not in df.columns and file_path != 'teamlists.csv':
-            raise ValueError(f"Data must contain a '{col}' column")
+    # Check required columns only for main stats file, not for teamlists.csv
+    if not file_path.endswith('teamlists.csv'):
+        required_columns = ['Round', 'Team', 'POS1']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            raise ValueError(f"Data must contain the following columns: {', '.join(missing_columns)}")
     
     # Handle POS2 column if present
     if 'POS2' not in df.columns:
         df['POS2'] = None  # Create empty POS2 column if not present
     
     return df
+
 
 def precompute_player_stats(df: pd.DataFrame) -> pd.DataFrame:
     """
