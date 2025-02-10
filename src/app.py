@@ -1,7 +1,14 @@
-from flask import Flask, render_template, request, jsonify
-from nrl_trade_calculator import calculate_trade_options, load_data, assign_priority_level, is_player_locked
-from typing import List, Dict, Any
-import traceback
+import os
+from flask import Flask, jsonify, render_template, request
+from flask_sqlalchemy import SQLAlchemy
+from flask_caching import Cache
+from dotenv import load_dotenv
+from nrl_trade_calculator import (
+    calculate_trade_options, 
+    assign_priority_level, 
+    is_player_locked,
+    precompute_player_stats
+)
 import pandas as pd
 from db_operations import create_tables, get_player_stats_df
 import os
@@ -9,7 +16,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-app = Flask(__name__)
+# Load environment variables from .env file
+load_dotenv() 
 
 def initialize_database():
     """Initialize database tables."""
@@ -37,21 +45,31 @@ def prepare_trade_option(option: Dict[str, Any]) -> Dict[str, Any]:
         'total_avg_base': float(option.get('total_avg_base', 0)) if 'total_avg_base' in option else 0.0,
         'combo_avg_bpre': float(option.get('combo_avg_bpre', 0)) if 'combo_avg_bpre' in option else 0.0
     }
+    
+    # Initialize extensions
+    db.init_app(app)
+    cache.init_app(app, config=cache_config)
 
-    for player in option.get('players', []):
-        prepared_player = {
-            'name': player.get('name', ''),
-            'position': player.get('position', ''),
-            'team': player.get('team', ''),  
-            'price': int(player.get('price', 0)),
-            'total_base': float(player.get('total_base', 0)),
-            'base_premium': int(float(player.get('base_premium', 0))),
-            'consecutive_good_weeks': int(player.get('consecutive_good_weeks', 0)),
-            'avg_base': float(player.get('avg_base', 0)) if 'avg_base' in player else 0.0
-        }
-        
-        if 'priority_level' in player:
-            prepared_player['priority_level'] = int(player['priority_level'])
+    # Define models
+    class Player(db.Model):
+        __tablename__ = 'players'
+        id = db.Column(db.Integer, primary_key=True)
+        Player = db.Column(db.String(80))
+        Team = db.Column(db.String(50))
+        POS1 = db.Column(db.String(50))
+        Price = db.Column(db.Integer)
+        Total_base = db.Column(db.Integer)
+        Base_exceeds_price_premium = db.Column(db.Integer)
+        consecutive_good_weeks = db.Column(db.Integer)
+        avg_bpre = db.Column(db.Float)
+        avg_base = db.Column(db.Float)
+        priority_level = db.Column(db.Integer)
+        Round = db.Column(db.Integer)
+        Age = db.Column(db.Integer)
+
+    def initialize_data():
+        with app.app_context():
+            db.create_all()
             
         prepared_option['players'].append(prepared_player)
 
@@ -114,35 +132,166 @@ def calculate():
                 if is_player_locked(player, consolidated_data, simulate_datetime):
                     locked_players.append(player)
             
-            if locked_players:
+            # Log the first 5 players in the database
+            first_five_players = Player.query.limit(5).all()
+            for player in first_five_players:
+                print(f"Player: {player.Player}, Team: {player.Team}, Price: {player.Price}")
+
+    @app.route('/')
+    def index():
+        return render_template('index.html')
+
+    @app.route('/calculate', methods=['POST'])
+    @cache.memoize(60)
+    def calculate():
+        try:
+            # Extract form data with debug logging
+            player1 = request.form['player1']
+            player2 = request.form.get('player2', '')
+            print(f"Received player names: player1='{player1}', player2='{player2}'")
+            
+            # Debug logging for database content
+            sample_players = Player.query.limit(5).all()
+            print("Sample players in database:", [p.Player for p in sample_players])
+            
+            strategy = request.form['strategy']
+            trade_type = request.form['tradeType']
+            allowed_positions = request.form.getlist('positions')
+            apply_lockout = 'applyLockout' in request.form
+            simulate_datetime = request.form.get('simulateDateTime')
+
+            # Get current round
+            max_round = db.session.query(db.func.max(Player.Round)).scalar()
+            
+            # Convert database query to DataFrame for comparison
+            traded_out = [p for p in [player1, player2] if p]
+            print(f"Looking up players in database: {traded_out}")
+            
+            # Debug the actual database query
+            player_data = Player.query.filter(
+                Player.Player.in_(traded_out),
+                Player.Round == max_round
+            ).all()
+            print(f"Found players in database: {[p.Player for p in player_data]}")
+            missing_players = []
+            for player_name in traded_out:
+                # Get the latest entry for each player, regardless of round
+                player = Player.query.filter_by(Player=player_name)\
+                                    .order_by(Player.Round.desc())\
+                                    .first()
+                if player:
+                    player_data.append(player)
+                else:
+                    missing_players.append(player_name)
+
+            if missing_players:
                 return jsonify({
-                    'error': f"{' and '.join(locked_players)}'s lockout has expired"
-                }), 400
+                    'error': f"Players not found in database: {', '.join(missing_players)}"
+                }), 404
 
-        options = calculate_trade_options(
-            consolidated_data=consolidated_data,
-            traded_out_players=traded_out_players,
-            maximize_base=maximize_base,
-            hybrid_approach=hybrid_approach,
-            max_options=10,
-            allowed_positions=allowed_positions,
-            trade_type=trade_type,
-            team_list=team_list,
-            simulate_datetime=simulate_datetime,
-            apply_lockout=apply_lockout
-        )
+            # Calculate salary freed
+            salary_freed = sum(p.Price for p in player_data)
 
-        prepared_options = [prepare_trade_option(option) for option in options]
+            # Get available players
+            max_round = db.session.query(db.func.max(Player.Round)).scalar()
+            query = Player.query.filter(
+                Player.Round == max_round,
+                ~Player.Player.in_(traded_out)
+            )
 
-        return jsonify(prepared_options)
+            # Fetch the first 5 players for debugging
+            first_five_players = Player.query.limit(5).all()
+            first_five_players_data = [{
+                'name': player.Player,
+                'team': player.Team,
+                'price': player.Price
+            } for player in first_five_players]
 
-    except Exception as e:
-        error_traceback = traceback.format_exc()
-        print(f"Error occurred: {error_traceback}")
+            # Apply lockout if enabled
+            if apply_lockout and simulate_datetime:
+                locked_teams = get_locked_teams(simulate_datetime)
+                query = query.filter(~Player.Team.in_(locked_teams))
+
+            # Filter by allowed positions if specified
+            if allowed_positions:
+                query = query.filter(Player.POS1.in_(allowed_positions))
+
+            # Convert to DataFrame with correct column names
+            players = query.all()
+            df = pd.DataFrame([{
+                'Player': p.Player,
+                'Team': p.Team,
+                'POS1': p.POS1,
+                'Price': p.Price,
+                'Total_base': p.Total_base,
+                'Base_exceeds_price_premium': p.Base_exceeds_price_premium,
+                'consecutive_good_weeks': p.consecutive_good_weeks,
+                'avg_bpre': p.avg_bpre,
+                'avg_base': p.avg_base,
+                'priority_level': p.priority_level,
+                'Round': p.Round,
+                'Age': p.Age
+            } for p in players])
+
+            # Rename columns to match what calculate_trade_options expects
+            df = df.rename(columns={
+                'Base_exceeds_price_premium': 'Base exceeds price premium'
+            })
+
+            # Calculate trade options
+            options = calculate_trade_options(
+                consolidated_data=df,
+                traded_out_players=traded_out,
+                maximize_base=(strategy == '2'),
+                hybrid_approach=(strategy == '3'),
+                allowed_positions=allowed_positions,
+                trade_type=trade_type,
+                simulate_datetime=simulate_datetime,
+                apply_lockout=apply_lockout
+            )
+
+            return jsonify({
+                'options': options[:10],
+                'first_five_players': first_five_players_data
+            })
+
+        except Exception as e:
+            app.logger.error(f"Calculation error: {str(e)}\n{traceback.format_exc()}")
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/check_db_connection', methods=['GET'])
+    def check_db_connection():
+        try:
+            # Attempt to execute a simple query
+            db.session.execute(text('SELECT 1'))
+            return jsonify({'message': 'Database connection is successful!'}), 200
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/first_players', methods=['GET'])
+    def first_players():
+        try:
+            first_five_players = Player.query.limit(5).all()
+            first_five_players_data = [{
+                'name': player.Player,
+                'team': player.Team,
+                'price': player.Price
+            } for player in first_five_players]
+            
+            return jsonify({'players': first_five_players_data}), 200
+        except Exception as e:
+            app.logger.error(f"Error fetching first players: {str(e)}")
+            return jsonify({'error': 'Failed to fetch players'}), 500
+
+    @app.route('/get_player_price', methods=['POST'])
+    def get_player_price():
+        player_name = request.form.get('player_name')
+        player = Player.query.filter_by(Player=player_name).first()
         
-        return jsonify({
-            'error': f'An error occurred while calculating trade options: {str(e)}'
-        }), 500
+        if player:
+            return jsonify({'price': player.Price}), 200
+        else:
+            return jsonify({'error': 'Player not found'}), 404
 
 @app.route('/players', methods=['GET'])
 def get_players():
