@@ -30,35 +30,9 @@ def get_column_definitions(df):
         'Age': 'INTEGER',
         'POS1': 'VARCHAR(10)',
         'POS2': 'VARCHAR(10)',
-        'Price': 'DECIMAL(12,2)',  # Increased precision
-        'Priced_at': 'DECIMAL(12,4)',  # Increased precision
+        'Price': 'DECIMAL(12,2)',
+        'Priced_at': 'DECIMAL(12,4)',
         'PTS': 'DECIMAL(12,2)',
-        'AVG': 'DECIMAL(12,2)',
-        'MP': 'INTEGER',
-        'T': 'DECIMAL(12,2)',
-        'TS': 'DECIMAL(12,2)',
-        'G': 'DECIMAL(12,2)',
-        'FG': 'DECIMAL(12,2)',
-        'TA': 'DECIMAL(12,2)',
-        'LB': 'DECIMAL(12,2)',
-        'LBA': 'DECIMAL(12,2)',
-        'TCK': 'DECIMAL(12,2)',
-        'TB': 'DECIMAL(12,2)',
-        'MT': 'DECIMAL(12,2)',
-        'OFG': 'DECIMAL(12,2)',
-        'OFH': 'DECIMAL(12,2)',
-        'ER': 'DECIMAL(12,2)',
-        'TO': 'DECIMAL(12,2)',
-        'FTF': 'DECIMAL(12,2)',
-        'MG': 'DECIMAL(12,2)',
-        'KM': 'DECIMAL(12,2)',
-        'KD': 'DECIMAL(12,2)',
-        'PC': 'DECIMAL(12,2)',
-        'SB': 'DECIMAL(12,2)',
-        'SO': 'DECIMAL(12,2)',
-        'FDO': 'DECIMAL(12,2)',
-        'SAI': 'DECIMAL(12,2)',
-        'EFIG': 'DECIMAL(12,2)',
         'Total_base': 'DECIMAL(12,2)',
         'Base_exceeds_price_premium': 'DECIMAL(12,4)'
     }
@@ -68,7 +42,7 @@ def get_column_definitions(df):
     columns = []
     for col in df.columns:
         clean_col = col.strip().replace(' ', '_')
-        col_type = column_types.get(col, default_type)
+        col_type = column_types.get(clean_col, default_type)
         columns.append(f'"{clean_col}" {col_type}')
     return columns
 
@@ -92,18 +66,34 @@ def import_excel_data(excel_file_path):
     # Read Excel file
     df = pd.read_excel(excel_file_path)
     
-    # Clean column names
+    # Print available columns for debugging
+    print("Available columns in Excel file:")
+    for col in df.columns:
+        print(f"- '{col}'")
+    
+    # Define the required columns using exact names from Excel
+    required_columns = [
+        'Round', 'Player', 'Team', 'Age', 'POS1', 'POS2',
+        'Price', 'Priced at', 'PTS', 'Total base',
+        'Base exceeds price premium'
+    ]
+    
+    # Filter DataFrame to include only required columns
+    try:
+        df = df[required_columns].copy()
+    except KeyError as e:
+        missing_cols = [col for col in required_columns if col not in df.columns]
+        print("\nMissing columns:")
+        for col in missing_cols:
+            print(f"- '{col}'")
+        raise ValueError(f"Missing required columns: {missing_cols}")
+    
+    # Clean column names after filtering
     df.columns = [col.strip().replace(' ', '_') for col in df.columns]
     
-    # Remove unnamed columns
-    df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
-    
     # Convert numeric columns to appropriate types and handle NaN values
-    numeric_columns = ['Round', 'Age', 'Price', 'Priced_at', 'PTS', 'AVG', 'MP', 
-                      'T', 'TS', 'G', 'FG', 'TA', 'LB', 'LBA', 'TCK', 'TB', 
-                      'MT', 'OFG', 'OFH', 'ER', 'TO', 'FTF', 'MG', 'KM', 'KD',
-                      'PC', 'SB', 'SO', 'FDO', 'SAI', 'EFIG', 'Total_base',
-                      'Base_exceeds_price_premium']
+    numeric_columns = ['Round', 'Age', 'Price', 'Priced_at', 'PTS', 
+                      'Total_base', 'Base_exceeds_price_premium']
     
     for col in numeric_columns:
         if col in df.columns:
@@ -138,7 +128,6 @@ def import_excel_data(excel_file_path):
     
     conn.commit()
     conn.close()
-    
 
 def main():
     try:
