@@ -3,10 +3,9 @@ from typing import List, Dict, Tuple
 from dataclasses import dataclass
 from itertools import combinations
 from datetime import datetime
-from functools import lru_cache
-from heapq import nlargest
-from dotenv import load_dotenv
+from sqlalchemy import create_engine
 import os
+from dotenv import load_dotenv
 
 @dataclass
 class Player:
@@ -19,53 +18,60 @@ class Player:
     consecutive_good_weeks: int
     age: int
 
-import pandas as pd
-from sqlalchemy import create_engine
 
-def get_player_stats_df():
+def load_data() -> pd.DataFrame:
     """
-    Retrieve player stats from database via SQLAlchemy model
+    Load data from PostgreSQL database and rename columns to match expected names.
     """
-    from app import Player, db  # Import inside function to avoid circular imports
-    with db.session() as session:
-        query = session.query(
-            Player.Player,
-            Player.Team,
-            Player.POS1,
-            Player.POS2,
-            Player.Price,
-            Player.Total_base,
-            Player.Base_exceeds_price_premium,
-            Player.Round,
-            Player.Age
-        )
-        df = pd.read_sql(query.statement, session.bind)
-        
-    # Rename columns to match original expected names
-    df = df.rename(columns={
+    # Read database connection parameters from environment
+    db_params = {
+        'host': os.getenv('DB_HOST'),
+        'database': os.getenv('DB_DATABASE'),
+        'user': os.getenv('DB_USER'),
+        'password': os.getenv('DB_PASSWORD'),
+        'port': os.getenv('DB_PORT')
+    }
+    
+    # Create connection string
+    conn_str = f"postgresql://{db_params['user']}:{db_params['password']}@{db_params['host']}:{db_params['port']}/{db_params['database']}"
+    engine = create_engine(conn_str)
+    
+    # Query all data from player_stats table
+    query = "SELECT * FROM player_stats;"
+    df = pd.read_sql(query, engine)
+    
+    # Map database columns to expected column names
+    column_mapping = {
         'Base_exceeds_price_premium': 'Base exceeds price premium',
-        'Player': 'Player',
-        'POS1': 'POS1'
-    })
+        'Total_base': 'Total base',
+        'POS1': 'POS1',  # Already matches
+        'Round': 'Round',  # Already matches
+        'Team': 'Team',  # Already matches
+        'Player': 'Player',  # Already matches
+        'Age': 'Age'  # Already matches
+    }
+    df.rename(columns=column_mapping, inplace=True)
     
-    return df
-
-
-def precompute_player_stats(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Precompute stats for all players during initial load
-    """
-    df = df.copy()
+    # Clean numeric columns (same as original)
+    numeric_columns = ['Base exceeds price premium', 'Total base', 'Price']
+    for col in numeric_columns:
+        if col in df.columns:
+            df[col] = (df[col].astype(str)
+                          .str.replace(',', '')
+                          .str.replace(' ', '')
+                          .str.replace('"', '')
+                          .str.replace('None', '')  )
+            df[col] = pd.to_numeric(df[col], errors='coerce')
     
-    # Calculate consecutive good weeks
-    df['consecutive_good_weeks'] = df.groupby('Player')['Base exceeds price premium'] \
-        .transform(lambda x: x.rolling(3, min_periods=1).apply(lambda s: (s >= 5).sum()))
+    # Check required columns
+    required_columns = ['Round', 'Team', 'POS1']
+    for col in required_columns:
+        if col not in df.columns:
+            raise ValueError(f"Data must contain a '{col}' column")
     
-    # Calculate averages
-    df['avg_bpre'] = df.groupby('Player')['Base exceeds price premium'] \
-        .transform(lambda x: x.rolling(2).mean().ffill())
-    df['avg_base'] = df.groupby('Player')['Total base'] \
-        .transform(lambda x: x.rolling(3, min_periods=2).mean().ffill())
+    # Handle POS2
+    if 'POS2' not in df.columns:
+        df['POS2'] = None
     
     return df
 
@@ -75,13 +81,6 @@ def get_rounds_data(df: pd.DataFrame) -> List[pd.DataFrame]:
     """
     rounds = sorted(df['Round'].unique())
     return [df[df['Round'] == round_num].copy() for round_num in rounds]
-
-@lru_cache(maxsize=1000)
-def get_player_data(player_name: str) -> dict:
-    """
-    Cache expensive calculations for common players.
-    """
-    return consolidated_data[consolidated_data['Player'] == player_name].iloc[-1].to_dict()
 
 def check_consistent_performance(
     player_name: str,
@@ -745,25 +744,6 @@ def calculate_trade_options(
     simulate_datetime: str = None,
     apply_lockout: bool = False
 ) -> List[Dict]:
-    # Add debug logging for traded out players
-    print(f"Looking for players: {traded_out_players}")
-    
-    # Verify players exist in the database
-    missing_players = []
-    for player in traded_out_players:
-        # Use exact matching without string manipulation
-        player_exists = not consolidated_data[consolidated_data['Player'] == player].empty
-        if not player_exists:
-            missing_players.append(player)
-            print(f"Player not found: {player}")
-            # Add debug information
-            print(f"All players in database: {consolidated_data['Player'].unique()}")
-            similar_players = consolidated_data[consolidated_data['Player'].str.contains(player.split()[0], na=False, case=False)]['Player'].unique()
-            print(f"Available players similar to {player}:", similar_players)
-    
-    if missing_players:
-        raise ValueError(f"Players not found in database: {', '.join(missing_players)}")
-    
     # Get locked out players if lockout restriction is applied
     locked_out_players = set()
     if apply_lockout:
@@ -929,11 +909,7 @@ def simulate_rule_levels(consolidated_data: pd.DataFrame, rounds: List[int]) -> 
 
 if __name__ == "__main__":
     try:
-        # Example file path - modify according to your setup
-        file_path = "NRL_stats.xlsx"
-        
-        # Load consolidated data
-        consolidated_data = load_data(file_path)
+        consolidated_data = load_data()  # Removed file_path
         print(f"Successfully loaded data for {consolidated_data['Round'].nunique()} rounds")
         
         # Get user preference for optimization strategy first

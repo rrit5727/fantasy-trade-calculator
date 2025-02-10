@@ -1,68 +1,10 @@
-import os
-from flask import Flask, jsonify, render_template, request
-from flask_sqlalchemy import SQLAlchemy
-from flask_caching import Cache
-from dotenv import load_dotenv
-from nrl_trade_calculator import (
-    calculate_trade_options, 
-    assign_priority_level, 
-    is_player_locked,
-    precompute_player_stats
-)
-import pandas as pd
-from db_operations import import_excel_data, create_db_connection
+from flask import Flask, render_template, request, jsonify
+from nrl_trade_calculator import calculate_trade_options, load_data, assign_priority_level, is_player_locked
+from typing import List, Dict, Any
 import traceback
-from sqlalchemy import text
-from typing import Dict, Any
-
-load_dotenv()
+import pandas as pd
 
 app = Flask(__name__)
-db = SQLAlchemy()
-cache = Cache()
-
-# Cache configuration
-cache_config = {
-    'CACHE_TYPE': 'simple',
-    'CACHE_DEFAULT_TIMEOUT': 300
-}
-
-# Initialize extensions
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///nrl_stats.db')
-db.init_app(app)
-cache.init_app(app, config=cache_config)
-
-# Define models at global scope
-class Player(db.Model):
-    __tablename__ = 'player_stats'
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)  # Add autoincrement
-    Player = db.Column(db.String(100))
-    Team = db.Column(db.String(50))
-    POS1 = db.Column(db.String(10))
-    POS2 = db.Column(db.String(10))  # Add this line
-    Price = db.Column(db.Numeric(10,2))
-    Total_base = db.Column(db.Integer)
-    Base_exceeds_price_premium = db.Column(db.Numeric(10,2))
-    Round = db.Column(db.Integer)
-    Age = db.Column(db.Integer)
-
-def get_player_stats_df():
-    """
-    Retrieve player stats from database and return as DataFrame
-    """
-    with app.app_context():
-        players = Player.query.all()
-        data = [{
-            'Player': p.Player,
-            'Team': p.Team,
-            'POS1': p.POS1,
-            'Price': float(p.Price),
-            'Total_base': p.Total_base,
-            'Base_exceeds_price_premium': float(p.Base_exceeds_price_premium),
-            'Round': p.Round,
-            'Age': p.Age
-        } for p in players]
-        return pd.DataFrame(data)
 
 def prepare_trade_option(option: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -78,32 +20,25 @@ def prepare_trade_option(option: Dict[str, Any]) -> Dict[str, Any]:
         'total_avg_base': float(option.get('total_avg_base', 0)) if 'total_avg_base' in option else 0.0,
         'combo_avg_bpre': float(option.get('combo_avg_bpre', 0)) if 'combo_avg_bpre' in option else 0.0
     }
+
+    for player in option.get('players', []):
+        prepared_player = {
+            'name': player.get('name', ''),
+            'position': player.get('position', ''),
+            'team': player.get('team', ''),  
+            'price': int(player.get('price', 0)),
+            'total_base': float(player.get('total_base', 0)),
+            'base_premium': int(float(player.get('base_premium', 0))),
+            'consecutive_good_weeks': int(player.get('consecutive_good_weeks', 0)),
+            'avg_base': float(player.get('avg_base', 0)) if 'avg_base' in player else 0.0
+        }
+        
+        if 'priority_level' in player:
+            prepared_player['priority_level'] = int(player['priority_level'])
+            
+        prepared_option['players'].append(prepared_player)
+
     return prepared_option
-
-def initialize_database():
-    """Initialize database by importing Excel data."""
-    try:
-        with app.app_context():
-            # Drop all existing tables and create new ones
-            db.drop_all()
-            db.create_all()
-            
-            # Create a new connection
-            conn = create_db_connection()
-            
-            # Import the Excel data using the existing function from db_operations
-            import_excel_data('NRL_stats.xlsx')
-            
-            # Close the connection
-            conn.close()
-            
-        print("Database initialized successfully")
-    except Exception as e:
-        print(f"Error initializing database: {e}")
-        raise
-
-# Initialize database when starting the app
-initialize_database()
 
 @app.route('/')
 def index():
@@ -115,8 +50,8 @@ def check_player_lockout():
         player_name = request.form['player_name']
         simulate_datetime = request.form.get('simulateDateTime')
         
-        # Load data from database
-        consolidated_data = get_player_stats_df()
+        file_path = "NRL_stats.xlsx"
+        consolidated_data = load_data(file_path)
         
         is_locked = is_player_locked(player_name, consolidated_data, simulate_datetime)
         
@@ -129,6 +64,51 @@ def check_player_lockout():
             'error': str(e)
         }), 500
 
+def simulate_rule_levels(consolidated_data: pd.DataFrame, rounds: List[int]) -> None:
+    player_name = consolidated_data['Player'].unique()[0]  # Assuming the first player in the data
+
+    rule_descriptions = {
+        1: "BPRE >= 14 for last 3 weeks",
+        2: "BPRE >= 21 for last 2 weeks",
+        3: "2 week Average BPRE >= 26",
+        4: "BPRE >= 12 for last 3 weeks",
+        5: "BPRE >= 19 for last 2 weeks",
+        6: "2 week Average BPRE >= 24",
+        7: "BPRE >= 10 for last 3 weeks",
+        8: "BPRE >= 17 for last 2 weeks",
+        9: "2 week Average BPRE >= 22",
+        10: "BPRE >= 8 for last 3 weeks",
+        11: "BPRE >= 15 for last 2 weeks",
+        12: "2 week Average BPRE >= 20",
+        13: "BPRE >= 6 for last 3 weeks",
+        14: "BPRE >= 13 for last 2 weeks",
+        15: "2 week Average BPRE >= 18",
+        16: "BPRE >= 10 for last 2 weeks",
+        17: "2 week Average BPRE >= 15",
+        18: "BPRE >= 8 for last 2 weeks",
+        19: "2 week Average BPRE >= 13",
+        20: "BPRE >= 6 for last 2 weeks",
+        21: "2 week Average BPRE >= 11",
+        22: "BPRE >= 2 for last 3 weeks",
+        23: "BPRE >= 4 for last 2 weeks",
+        24: "2 week Average BPRE >= 9",
+        25: "No rules satisfied"
+    }
+
+    for round_num in rounds:
+        recent_rounds = sorted(consolidated_data['Round'].unique())
+        recent_rounds = [r for r in recent_rounds if r <= round_num][-4:]
+        cumulative_data = consolidated_data[consolidated_data['Round'].isin(recent_rounds)]
+        player_data = cumulative_data[cumulative_data['Player'] == player_name]
+        
+        if player_data.empty:
+            print(f"Round {round_num}: No data for player {player_name}")
+            continue
+        
+        priority_level = assign_priority_level(player_data.iloc[-1], cumulative_data)
+        rule_description = rule_descriptions.get(priority_level, "Unknown rule")
+        print(f"Rule levels passed as at round {round_num}: Rule Level Satisfied: {priority_level} - {rule_description}")
+
 @app.route('/calculate', methods=['POST'])
 def calculate():
     try:
@@ -136,136 +116,94 @@ def calculate():
         player2 = request.form.get('player2')
         strategy = request.form['strategy']
         trade_type = request.form['tradeType']
-        allowed_positions = request.form.getlist('positions')
+        allowed_positions = request.form.getlist('positions') if trade_type == 'positionalSwap' else []
+        restrict_to_team_list = 'restrictToTeamList' in request.form
         apply_lockout = 'applyLockout' in request.form
         simulate_datetime = request.form.get('simulateDateTime')
 
-        # Load data from database
-        consolidated_data = get_player_stats_df()
+        # Load main data from database
+        consolidated_data = load_data()  # No file_path
 
-        traded_out = [player1]
+        team_list = None
+        if restrict_to_team_list:
+            team_list_path = "teamlists.csv"
+            team_df = pd.read_csv(team_list_path)  # Directly read CSV
+            team_list = team_df['Player'].unique().tolist()
+
+        maximize_base = (strategy == '2')
+        hybrid_approach = (strategy == '3')
+
+        traded_out_players = [player1]
         if player2:
-            traded_out.append(player2)
+            traded_out_players.append(player2)
 
-        # Get player data for salary calculation
-        player_data = []
-        for player_name in traded_out:
-            player = Player.query.filter_by(Player=player_name).first()
-            if player:
-                player_data.append(player)
+        # Validate lockout status for traded out players
+        if apply_lockout:
+            locked_players = []
+            for player in traded_out_players:
+                if is_player_locked(player, consolidated_data, simulate_datetime):
+                    locked_players.append(player)
+            
+            if locked_players:
+                return jsonify({
+                    'error': f"{' and '.join(locked_players)}'s lockout has expired"
+                }), 400
 
-        # Calculate salary freed
-        salary_freed = sum(float(p.Price) for p in player_data)
-
-        # Get available players
-        max_round = db.session.query(db.func.max(Player.Round)).scalar()
-        query = Player.query.filter(
-            Player.Round == max_round,
-            ~Player.Player.in_(traded_out)
-        )
-
-        # Fetch the first 5 players for debugging
-        first_five_players = Player.query.limit(5).all()
-        first_five_players_data = [{
-            'name': player.Player,
-            'team': player.Team,
-            'price': float(player.Price)
-        } for player in first_five_players]
-
-        # Filter by allowed positions if specified
-        if allowed_positions:
-            query = query.filter(Player.POS1.in_(allowed_positions))
-
-        # Convert to DataFrame with correct column names
-        players = query.all()
-        df = pd.DataFrame([{
-            'Player': p.Player,
-            'Team': p.Team,
-            'POS1': p.POS1,
-            'Price': float(p.Price),
-            'Total_base': p.Total_base,
-            'Base_exceeds_price_premium': float(p.Base_exceeds_price_premium),
-            'Round': p.Round,
-            'Age': p.Age
-        } for p in players])
-
-        # Rename columns to match what calculate_trade_options expects
-        df = df.rename(columns={
-            'Base_exceeds_price_premium': 'Base exceeds price premium'
-        })
-
-        # Calculate trade options
         options = calculate_trade_options(
-            consolidated_data=df,
-            traded_out_players=traded_out,
-            maximize_base=(strategy == '2'),
-            hybrid_approach=(strategy == '3'),
+            consolidated_data=consolidated_data,
+            traded_out_players=traded_out_players,
+            maximize_base=maximize_base,
+            hybrid_approach=hybrid_approach,
+            max_options=10,
             allowed_positions=allowed_positions,
             trade_type=trade_type,
+            team_list=team_list,
             simulate_datetime=simulate_datetime,
-            apply_lockout=apply_lockout,
+            apply_lockout=apply_lockout
         )
 
-        # Prepare options for JSON response
-        prepared_options = [prepare_trade_option(option) for option in options[:10]]
+        prepared_options = [prepare_trade_option(option) for option in options]
 
+        return jsonify(prepared_options)
+
+    except Exception as e:
+        error_traceback = traceback.format_exc()
+        print(f"Error occurred: {error_traceback}")
+        
         return jsonify({
-            'options': prepared_options,
-            'first_five_players': first_five_players_data
-        })
-
-    except Exception as e:
-        app.logger.error(f"Calculation error: {str(e)}\n{traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/check_db_connection', methods=['GET'])
-def check_db_connection():
-    try:
-        # Attempt to execute a simple query
-        db.session.execute(text('SELECT 1'))
-        return jsonify({'message': 'Database connection is successful!'}), 200
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/first_players', methods=['GET'])
-def first_players():
-    try:
-        first_five_players = Player.query.limit(5).all()
-        first_five_players_data = [{
-            'name': player.Player,
-            'team': player.Team,
-            'price': float(player.Price)
-        } for player in first_five_players]
-        
-        return jsonify({'players': first_five_players_data}), 200
-    except Exception as e:
-        app.logger.error(f"Error fetching first players: {str(e)}")
-        return jsonify({'error': 'Failed to fetch players'}), 500
-
-@app.route('/get_player_price', methods=['POST'])
-def get_player_price():
-    try:
-        player_name = request.form.get('player_name')
-        player = Player.query.filter_by(Player=player_name).first()
-        
-        if player:
-            return jsonify({'price': float(player.Price)}), 200
-        else:
-            return jsonify({'error': 'Player not found'}), 404
-    except Exception as e:
-        app.logger.error(f"Error getting player price: {str(e)}")
-        return jsonify({'error': 'Failed to get player price'}), 500
+            'error': f'An error occurred while calculating trade options: {str(e)}'
+        }), 500
 
 @app.route('/players', methods=['GET'])
 def get_players():
     try:
-        # Load data from database
-        consolidated_data = get_player_stats_df()
+        consolidated_data = load_data()  # No file_path
         player_names = consolidated_data['Player'].unique().tolist()
         return jsonify(player_names)
     except Exception as e:
-        app.logger.error(f"Error getting players: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    try:
+        while True:
+            choice = input("\nDo you want to:\n1. Run the ordinary trade calculator\n2. Run rule set simulation for 1 player\nEnter 1 or 2: ")
+            if choice in ['1', '2']:
+                break
+            print("Invalid input. Please enter 1 or 2.")
+
+        file_path = "NRL_stats.xlsx" if choice == '1' else "player_simulation.xlsx"
+        consolidated_data = load_data()  # Removed file_path
+        print(f"Successfully loaded data for {consolidated_data['Round'].nunique()} rounds")
+
+        if choice == '2':
+            rounds = list(range(1, int(consolidated_data['Round'].max()) + 1))
+            simulate_rule_levels(consolidated_data, rounds)
+        else:
+            app.run(debug=True)
+
+    except FileNotFoundError:
+        print("Error: Could not find data file in the current directory")
+    except ValueError as e:
+        print("Error:", str(e))
+    except Exception as e:
+        print("An error occurred:", str(e))
