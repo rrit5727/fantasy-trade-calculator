@@ -5,6 +5,8 @@ from itertools import combinations
 from datetime import datetime
 from functools import lru_cache
 from heapq import nlargest
+from dotenv import load_dotenv
+import os
 
 @dataclass
 class Player:
@@ -17,42 +19,68 @@ class Player:
     consecutive_good_weeks: int
     age: int
 
-def load_data(file_path: str) -> pd.DataFrame:
+import pandas as pd
+from sqlalchemy import create_engine
+
+def load_data() -> pd.DataFrame:
     """
-    Load data from a single file containing multiple rounds.
-    
-    Parameters:
-    file_path (str): Path to the data file
+    Load data from PostgreSQL with improved error handling and string matching.
     
     Returns:
-    pd.DataFrame: Loaded and cleaned data
+    pd.DataFrame: Loaded and cleaned data from the PostgreSQL database.
     """
-    if file_path.endswith('.csv'):
-        df = pd.read_csv(file_path)
-    else:
-        df = pd.read_excel(file_path)
-        
+    # Define the PostgreSQL connection string (update with your credentials)
+    connection_string = os.getenv('DATABASE_URL')
+
+    if not connection_string:
+        raise ValueError("DATABASE_URL is not set in the .env file.")
+    
+    # Create a SQLAlchemy engine to connect to the database
+    engine = create_engine(connection_string)
+    
+    # Define the SQL query to fetch data from the table
+    query = """
+        SELECT * 
+        FROM public.players 
+        WHERE "Player" IS NOT NULL
+    """
+    
+    # Load data into a pandas DataFrame
+    df = pd.read_sql(query, engine)
+    
+    # Clean player names - remove leading/trailing whitespace
+    df['Player'] = df['Player'].str.strip().str.title()
+    
     # Clean numeric columns with safe type conversion
-    numeric_columns = ['Base exceeds price premium', 'Total base', 'Price']
+    numeric_columns = ['Base_exceeds_price_premium', 'Total_base', 'Price']
     
     for col in numeric_columns:
-        if col in df.columns:
-            df[col] = (df[col].astype(str)
-                      .str.replace(',', '')
-                      .str.replace(' ', '')
-                      .str.replace('"', ''))
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+        if (col in df.columns):
+            # Convert to string, remove commas, spaces, and quotes, then convert to numeric
+            df[col] = (
+                df[col]
+                .astype(str)
+                .str.replace(',', '')
+                .str.replace(' ', '')
+                .str.replace('"', '')
+            )
+            # Convert to numeric, coercing errors to NaN and then filling NaN with 0
+            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
     
-    # Check required columns only for main stats file, not for teamlists.csv
-    if not file_path.endswith('teamlists.csv'):
-        required_columns = ['Round', 'Team', 'POS1']
-        missing_columns = [col for col in required_columns if col not in df.columns]
-        if missing_columns:
-            raise ValueError(f"Data must contain the following columns: {', '.join(missing_columns)}")
+    # Check required columns
+    required_columns = ['Round', 'Team', 'POS1']
+    missing_columns = [col for col in required_columns if col not in df.columns]
+    if missing_columns:
+        raise ValueError(f"Data must contain the following columns: {', '.join(missing_columns)}")
     
-    # Handle POS2 column if present
+    # Handle POS2 column if not present
     if 'POS2' not in df.columns:
         df['POS2'] = None  # Create empty POS2 column if not present
+    
+    # Add debug logging
+    print(f"Loaded {len(df)} rows")
+    print(f"Unique players: {df['Player'].nunique()}")
+    print("Sample of player names:", df['Player'].unique()[:5])
     
     return df
 
@@ -757,6 +785,25 @@ def calculate_trade_options(
     simulate_datetime: str = None,
     apply_lockout: bool = False
 ) -> List[Dict]:
+    # Add debug logging for traded out players
+    print(f"Looking for players: {traded_out_players}")
+    
+    # Verify players exist in the database
+    missing_players = []
+    for player in traded_out_players:
+        # Use exact matching without string manipulation
+        player_exists = not consolidated_data[consolidated_data['Player'] == player].empty
+        if not player_exists:
+            missing_players.append(player)
+            print(f"Player not found: {player}")
+            # Add debug information
+            print(f"All players in database: {consolidated_data['Player'].unique()}")
+            similar_players = consolidated_data[consolidated_data['Player'].str.contains(player.split()[0], na=False, case=False)]['Player'].unique()
+            print(f"Available players similar to {player}:", similar_players)
+    
+    if missing_players:
+        raise ValueError(f"Players not found in database: {', '.join(missing_players)}")
+    
     # Get locked out players if lockout restriction is applied
     locked_out_players = set()
     if apply_lockout:
