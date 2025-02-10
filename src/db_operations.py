@@ -2,14 +2,19 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 import psycopg2
 from datetime import datetime
+import os
+from dotenv import load_dotenv
 
-# Database connection parameters
+# Load environment variables from the .env file
+load_dotenv()
+
+# Database connection parameters from the .env file
 DB_PARAMS = {
-    'host': 'localhost',
-    'database': 'NRL_FANTASY_TRADE_CALC',
-    'user': 'postgres',
-    'password': '8wriebsA',
-    'port': '5433'
+    'host': os.getenv('DB_HOST'),
+    'database': os.getenv('DB_DATABASE'),
+    'user': os.getenv('DB_USER'),
+    'password': os.getenv('DB_PASSWORD'),
+    'port': os.getenv('DB_PORT')
 }
 
 def create_db_connection():
