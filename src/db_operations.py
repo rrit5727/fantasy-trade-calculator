@@ -17,12 +17,27 @@ DB_PARAMS = {
     'port': os.getenv('DB_PORT')
 }
 
+# Define the columns we want to keep
+COLUMNS_TO_KEEP = [
+    'Round',
+    'Player',
+    'Team',
+    'Age',
+    'POS1',
+    'POS2',
+    'Price',
+    'Priced at',
+    'PTS',
+    'Total base',
+    'Base exceeds price premium'
+]
+
 def create_db_connection():
     """Create database connection"""
     return psycopg2.connect(**DB_PARAMS)
 
-def get_column_definitions(df):
-    """Generate SQL column definitions based on DataFrame columns"""
+def get_column_definitions():
+    """Generate SQL column definitions for desired columns"""
     column_types = {
         'Round': 'INTEGER',
         'Player': 'VARCHAR(100)',
@@ -31,46 +46,21 @@ def get_column_definitions(df):
         'POS1': 'VARCHAR(10)',
         'POS2': 'VARCHAR(10)',
         'Price': 'DECIMAL(10,2)',
-        'Priced at': 'DECIMAL(10,2)',
+        'Priced_at': 'DECIMAL(10,2)',
         'PTS': 'INTEGER',
-        'AVG': 'DECIMAL(10,2)',
-        'MP': 'INTEGER',
-        'T': 'INTEGER',
-        'TS': 'INTEGER',
-        'G': 'INTEGER',
-        'FG': 'INTEGER',
-        'TA': 'INTEGER',
-        'LB': 'INTEGER',
-        'LBA': 'INTEGER',
-        'TCK': 'INTEGER',
-        'TB': 'INTEGER',
-        'MT': 'INTEGER',
-        'OFG': 'INTEGER',
-        'OFH': 'INTEGER',
-        'ER': 'INTEGER',
-        'TO': 'INTEGER',
-        'FTF': 'INTEGER',
-        'MG': 'INTEGER',
-        'KM': 'INTEGER',
-        'KD': 'INTEGER',
-        'Total base': 'INTEGER',
-        'Base exceeds price premium': 'DECIMAL(10,2)'
+        'Total_base': 'INTEGER',
+        'Base_exceeds_price_premium': 'DECIMAL(10,2)'
     }
     
-    # Default type for any column not explicitly defined
-    default_type = 'VARCHAR(100)'
-    
     columns = []
-    for col in df.columns:
-        clean_col = col.strip().replace(' ', '_')  # Replace spaces with underscores
-        col_type = column_types.get(col, default_type)
-        columns.append(f'"{clean_col}" {col_type}')
+    for col in column_types.keys():
+        columns.append(f'"{col}" {column_types[col]}')
     
     return columns
 
-def create_table(conn, df):
-    """Create the table with columns matching the DataFrame"""
-    column_defs = get_column_definitions(df)
+def create_table(conn):
+    """Create the table with only the desired columns"""
+    column_defs = get_column_definitions()
     create_table_sql = f"""
     DROP TABLE IF EXISTS player_stats;
     CREATE TABLE player_stats (
@@ -88,6 +78,9 @@ def import_excel_data(excel_file_path):
     # Read Excel file
     df = pd.read_excel(excel_file_path)
     
+    # Select only the columns we want to keep
+    df = df[COLUMNS_TO_KEEP]
+    
     # Clean column names (replace spaces with underscores)
     df.columns = [col.strip().replace(' ', '_') for col in df.columns]
     
@@ -100,7 +93,7 @@ def import_excel_data(excel_file_path):
     
     # Create table with matching columns
     conn = create_db_connection()
-    create_table(conn, df)
+    create_table(conn)
     conn.close()
     
     # Import data
