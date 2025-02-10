@@ -22,73 +22,38 @@ class Player:
 import pandas as pd
 from sqlalchemy import create_engine
 
-def load_data() -> pd.DataFrame:
+def get_player_stats_df():
     """
-    Load data from PostgreSQL with improved error handling and string matching.
-    
-    Returns:
-    pd.DataFrame: Loaded and cleaned data from the PostgreSQL database.
+    Retrieve player stats from database via SQLAlchemy model
     """
-    # Define the PostgreSQL connection string (update with your credentials)
-    connection_string = os.getenv('DATABASE_URL')
-
-    if not connection_string:
-        raise ValueError("DATABASE_URL is not set in the .env file.")
-    
-    # Create a SQLAlchemy engine to connect to the database
-    engine = create_engine(connection_string)
-    
-    # Define the SQL query to fetch data from the table
-    query = """
-        SELECT * 
-        FROM public.players 
-        WHERE "Player" IS NOT NULL 
-        AND "Player" != ''
-    """
-    
-    # Load data into a pandas DataFrame
-    df = pd.read_sql(query, engine)
-    
-    # Clean player names - remove leading/trailing whitespace
-    df['Player'] = df['Player'].str.strip()
-    
-    # Clean numeric columns with safe type conversion
-    numeric_columns = ['Base_exceeds_price_premium', 'Total_base', 'Price']
-    
-    for col in numeric_columns:
-        if col in df.columns:
-            # Convert to string, remove commas, spaces, and quotes, then convert to numeric
-            df[col] = (
-                df[col]
-                .astype(str)
-                .str.replace(',', '')
-                .str.replace(' ', '')
-                .str.replace('"', '')
-            )
-            # Convert to numeric, coercing errors to NaN and then filling NaN with 0
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
-    
-    # Check required columns
-    required_columns = ['Round', 'Team', 'POS1']
-    missing_columns = [col for col in required_columns if col not in df.columns]
-    if missing_columns:
-        raise ValueError(f"Data must contain the following columns: {', '.join(missing_columns)}")
-    
-    # Handle POS2 column if not present
-    if 'POS2' not in df.columns:
-        df['POS2'] = None  # Create empty POS2 column if not present
-    
-    # Add debug logging
-    print(f"Loaded {len(df)} rows")
-    print(f"Unique players: {df['Player'].nunique()}")
-    print("Sample of player names:", df['Player'].unique()[:5])
+    from app import Player, db  # Import inside function to avoid circular imports
+    with db.session() as session:
+        query = session.query(
+            Player.Player,
+            Player.Team,
+            Player.POS1,
+            Player.POS2,
+            Player.Price,
+            Player.Total_base,
+            Player.Base_exceeds_price_premium,
+            Player.Round,
+            Player.Age
+        )
+        df = pd.read_sql(query.statement, session.bind)
+        
+    # Rename columns to match original expected names
+    df = df.rename(columns={
+        'Base_exceeds_price_premium': 'Base exceeds price premium',
+        'Player': 'Player',
+        'POS1': 'POS1'
+    })
     
     return df
 
 
 def precompute_player_stats(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Precompute stats for all players during initial load.
+    Precompute stats for all players during initial load
     """
     df = df.copy()
     
@@ -101,12 +66,6 @@ def precompute_player_stats(df: pd.DataFrame) -> pd.DataFrame:
         .transform(lambda x: x.rolling(2).mean().ffill())
     df['avg_base'] = df.groupby('Player')['Total base'] \
         .transform(lambda x: x.rolling(3, min_periods=2).mean().ffill())
-    
-    # Calculate priority levels
-    df['priority_level'] = df.apply(
-        lambda row: assign_priority_level(row, df), 
-        axis=1
-    )
     
     return df
 
@@ -792,12 +751,15 @@ def calculate_trade_options(
     # Verify players exist in the database
     missing_players = []
     for player in traded_out_players:
-        player_exists = len(consolidated_data[consolidated_data['Player'].str.strip() == player.strip()]) > 0
+        # Use exact matching without string manipulation
+        player_exists = not consolidated_data[consolidated_data['Player'] == player].empty
         if not player_exists:
             missing_players.append(player)
             print(f"Player not found: {player}")
-            print(f"Available players similar to {player}:", 
-                  consolidated_data[consolidated_data['Player'].str.contains(player.split()[0], na=False)]['Player'].unique())
+            # Add debug information
+            print(f"All players in database: {consolidated_data['Player'].unique()}")
+            similar_players = consolidated_data[consolidated_data['Player'].str.contains(player.split()[0], na=False, case=False)]['Player'].unique()
+            print(f"Available players similar to {player}:", similar_players)
     
     if missing_players:
         raise ValueError(f"Players not found in database: {', '.join(missing_players)}")

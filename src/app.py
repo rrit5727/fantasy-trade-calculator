@@ -204,7 +204,6 @@ def calculate():
             trade_type=trade_type,
             simulate_datetime=simulate_datetime,
             apply_lockout=apply_lockout,
-            salary_freed=salary_freed
         )
 
         # Prepare options for JSON response
