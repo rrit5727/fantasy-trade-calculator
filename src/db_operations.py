@@ -17,27 +17,12 @@ DB_PARAMS = {
     'port': os.getenv('DB_PORT')
 }
 
-# Define the columns we want to keep
-COLUMNS_TO_KEEP = [
-    'Round',
-    'Player',
-    'Team',
-    'Age',
-    'POS1',
-    'POS2',
-    'Price',
-    'Priced at',
-    'PTS',
-    'Total base',
-    'Base exceeds price premium'
-]
-
 def create_db_connection():
     """Create database connection"""
     return psycopg2.connect(**DB_PARAMS)
 
-def get_column_definitions():
-    """Generate SQL column definitions for desired columns"""
+def get_column_definitions(df):
+    """Generate SQL column definitions based on DataFrame columns"""
     column_types = {
         'Round': 'INTEGER',
         'Player': 'VARCHAR(100)',
@@ -45,22 +30,51 @@ def get_column_definitions():
         'Age': 'INTEGER',
         'POS1': 'VARCHAR(10)',
         'POS2': 'VARCHAR(10)',
-        'Price': 'DECIMAL(10,2)',
-        'Priced_at': 'DECIMAL(10,2)',
-        'PTS': 'INTEGER',
-        'Total_base': 'INTEGER',
-        'Base_exceeds_price_premium': 'DECIMAL(10,2)'
+        'Price': 'DECIMAL(12,2)',  # Increased precision
+        'Priced_at': 'DECIMAL(12,4)',  # Increased precision
+        'PTS': 'DECIMAL(12,2)',
+        'AVG': 'DECIMAL(12,2)',
+        'MP': 'INTEGER',
+        'T': 'DECIMAL(12,2)',
+        'TS': 'DECIMAL(12,2)',
+        'G': 'DECIMAL(12,2)',
+        'FG': 'DECIMAL(12,2)',
+        'TA': 'DECIMAL(12,2)',
+        'LB': 'DECIMAL(12,2)',
+        'LBA': 'DECIMAL(12,2)',
+        'TCK': 'DECIMAL(12,2)',
+        'TB': 'DECIMAL(12,2)',
+        'MT': 'DECIMAL(12,2)',
+        'OFG': 'DECIMAL(12,2)',
+        'OFH': 'DECIMAL(12,2)',
+        'ER': 'DECIMAL(12,2)',
+        'TO': 'DECIMAL(12,2)',
+        'FTF': 'DECIMAL(12,2)',
+        'MG': 'DECIMAL(12,2)',
+        'KM': 'DECIMAL(12,2)',
+        'KD': 'DECIMAL(12,2)',
+        'PC': 'DECIMAL(12,2)',
+        'SB': 'DECIMAL(12,2)',
+        'SO': 'DECIMAL(12,2)',
+        'FDO': 'DECIMAL(12,2)',
+        'SAI': 'DECIMAL(12,2)',
+        'EFIG': 'DECIMAL(12,2)',
+        'Total_base': 'DECIMAL(12,2)',
+        'Base_exceeds_price_premium': 'DECIMAL(12,4)'
     }
     
+    # Default type for any column not explicitly defined
+    default_type = 'VARCHAR(100)'
     columns = []
-    for col in column_types.keys():
-        columns.append(f'"{col}" {column_types[col]}')
-    
+    for col in df.columns:
+        clean_col = col.strip().replace(' ', '_')
+        col_type = column_types.get(col, default_type)
+        columns.append(f'"{clean_col}" {col_type}')
     return columns
 
-def create_table(conn):
-    """Create the table with only the desired columns"""
-    column_defs = get_column_definitions()
+def create_table(conn, df):
+    """Create the table with columns matching the DataFrame"""
+    column_defs = get_column_definitions(df)
     create_table_sql = f"""
     DROP TABLE IF EXISTS player_stats;
     CREATE TABLE player_stats (
@@ -78,26 +92,53 @@ def import_excel_data(excel_file_path):
     # Read Excel file
     df = pd.read_excel(excel_file_path)
     
-    # Select only the columns we want to keep
-    df = df[COLUMNS_TO_KEEP]
-    
-    # Clean column names (replace spaces with underscores)
+    # Clean column names
     df.columns = [col.strip().replace(' ', '_') for col in df.columns]
     
-    # Create SQLAlchemy engine
-    engine = create_engine(f'postgresql://{DB_PARAMS["user"]}:{DB_PARAMS["password"]}@{DB_PARAMS["host"]}:{DB_PARAMS["port"]}/{DB_PARAMS["database"]}')
+    # Remove unnamed columns
+    df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
     
-    # Remove any $ signs and convert to numeric
-    if 'Price' in df.columns:
-        df['Price'] = df['Price'].replace('[\$,]', '', regex=True).astype(float)
+    # Convert numeric columns to appropriate types and handle NaN values
+    numeric_columns = ['Round', 'Age', 'Price', 'Priced_at', 'PTS', 'AVG', 'MP', 
+                      'T', 'TS', 'G', 'FG', 'TA', 'LB', 'LBA', 'TCK', 'TB', 
+                      'MT', 'OFG', 'OFH', 'ER', 'TO', 'FTF', 'MG', 'KM', 'KD',
+                      'PC', 'SB', 'SO', 'FDO', 'SAI', 'EFIG', 'Total_base',
+                      'Base_exceeds_price_premium']
+    
+    for col in numeric_columns:
+        if col in df.columns:
+            # Convert to float first to handle any decimal values
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+            # Replace NaN with None
+            df[col] = df[col].where(pd.notnull(df[col]), None)
+    
+    # Replace any remaining NaN values with None
+    df = df.replace({pd.NA: None, pd.NaT: None, float('nan'): None})
     
     # Create table with matching columns
     conn = create_db_connection()
-    create_table(conn)
+    create_table(conn, df)
+    
+    # Insert data using cursor
+    with conn.cursor() as cur:
+        for idx, row in df.iterrows():
+            # Convert row to list and handle any remaining NaN values
+            row_values = [None if pd.isna(val) else val for val in row]
+            columns = ','.join(f'"{col}"' for col in df.columns)
+            values = ','.join('%s' for _ in df.columns)
+            insert_sql = f'INSERT INTO player_stats ({columns}) VALUES ({values})'
+            try:
+                cur.execute(insert_sql, row_values)
+            except Exception as e:
+                print(f"Error at row {idx+1}")
+                print(f"Values being inserted: {row_values}")
+                print(f"Error details: {str(e)}")
+                conn.rollback()  # Rollback the transaction
+                raise e
+    
+    conn.commit()
     conn.close()
     
-    # Import data
-    df.to_sql('player_stats', engine, if_exists='replace', index=False)
 
 def main():
     try:
