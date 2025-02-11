@@ -50,14 +50,11 @@ def load_data() -> pd.DataFrame:
                 WHERE table_name = 'player_stats';
             """
             db_columns = pd.read_sql(query, connection)
-            print("Available columns in database:", db_columns['column_name'].tolist())
             
             # Now fetch the actual data
             query = "SELECT * FROM player_stats;"
             df = pd.read_sql(query, connection)
             
-            # Print the actual column names we got
-            print("\nActual columns in DataFrame:", df.columns.tolist())
             
         # Updated column mapping to match the database column names
         column_mapping = {
@@ -82,8 +79,6 @@ def load_data() -> pd.DataFrame:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col].fillna(0), errors='coerce').fillna(0)
         
-        # Print final column names after transformation
-        print("\nFinal columns after transformation:", df.columns.tolist())
         
         # Ensure required columns exist
         required_columns = ['Round', 'Team', 'POS1', 'Player', 'Price', 

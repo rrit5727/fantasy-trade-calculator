@@ -90,20 +90,10 @@
             </select>
         </div>
         
-        <div class="form-group">
-            <label for="playerPriceInput">Enter Player Name:</label>
-            <input type="text" id="playerPriceInput" name="playerPriceInput" required>
-            <button id="showPlayerPrice" type="button">Show Player Price</button>
-        </div>
-        
         <button type="submit">Calculate Trade Options</button>
     </form>
 
     <div id="results" class="results"></div>
-
-    <div id="firstPlayersResults" class="results"></div>
-
-    <div id="playerPriceResult" class="results"></div>
 
     <script>
         $(document).ready(function() {
@@ -162,20 +152,10 @@
                     url: '/calculate',
                     method: 'POST',
                     data: $.param(formData),
-                    success: function(response) {
+                    success: function(options) {
                         let html = '<h2>Trade Options</h2>';
                         
-                        // Display first five players
-                        let firstFiveHtml = '<h3>First 5 Players:</h3><ul>';
-                        response.first_five_players.forEach(player => {
-                            firstFiveHtml += `<li>${player.name} (Team: ${player.team}, Price: $${player.price.toLocaleString()})</li>`;
-                        });
-                        firstFiveHtml += '</ul>';
-                        
-                        // Append first five players to results
-                        $('#results').html(firstFiveHtml + html);
-                        
-                        response.options.forEach((option, index) => {
+                        options.forEach((option, index) => {
                             html += `
                                 <div class="trade-option">
                                     <h3>Option ${index + 1}</h3>
@@ -393,51 +373,6 @@
                     if ($('#player1').val()) checkPlayerLockout($('#player1'));
                     if ($('#player2').val()) checkPlayerLockout($('#player2'));
                 }
-            });
-
-            // Fetch first 5 players when the button is clicked
-            $('#showFirstPlayers').on('click', function() {
-                $.ajax({
-                    url: '/first_players',
-                    method: 'GET',
-                    success: function(response) {
-                        let html = '<h3>First 5 Players:</h3><ul>';
-                        response.players.forEach(player => {
-                            html += `<li>${player.name} (Team: ${player.team}, Price: $${player.price.toLocaleString()})</li>`;
-                        });
-                        html += '</ul>';
-                        $('#firstPlayersResults').html(html);
-                    },
-                    error: function(xhr) {
-                        console.error('Error fetching first players:', xhr.responseText);
-                    }
-                });
-            });
-
-            // Fetch player price when the button is clicked
-            $('#showPlayerPrice').on('click', function() {
-                const playerName = $('#playerPriceInput').val().trim();
-                if (!playerName) {
-                    $('#playerPriceResult').html('<div class="error">Please enter a player name.</div>');
-                    return;
-                }
-
-                $.ajax({
-                    url: '/get_player_price',
-                    method: 'POST',
-                    data: { player_name: playerName },
-                    success: function(response) {
-                        if (response.price) {
-                            $('#playerPriceResult').html(`<h3>${playerName}'s Price: $${response.price.toLocaleString()}</h3>`);
-                        } else {
-                            $('#playerPriceResult').html(`<div class="error">Player not found.</div>`);
-                        }
-                    },
-                    error: function(xhr) {
-                        console.error('Error fetching player price:', xhr.responseText);
-                        $('#playerPriceResult').html('<div class="error">An error occurred while fetching the price.</div>');
-                    }
-                });
             });
         });
     </script>
