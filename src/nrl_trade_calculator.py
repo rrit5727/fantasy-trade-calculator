@@ -456,41 +456,53 @@ def generate_comprehensive_trade_options(
                     if len(valid_combinations) >= max_options:
                         break
         else:
+            # For two-player combinations
             for i in range(len(flat_players)):
                 if flat_players[i]['Player'] in used_players:
                     continue
                     
-                valid_combo_found = False
-                for j in range(i + 1, len(flat_players)):
-                    if flat_players[j]['Player'] in used_players:
-                        continue
-                        
-                    first_player = flat_players[i]
-                    second_player = flat_players[j]
-                    
-                    # Check positions if traded_out_positions is specified and requires coverage
-                    if traded_out_positions and (trade_type == 'likeForLike' or (trade_type == 'positionalSwap' and len(traded_out_positions) == 2)):
-                        combined_positions = set()
-                        for player in [first_player, second_player]:
-                            combined_positions.add(player['POS1'])
-                            if pd.notna(player['POS2']):
-                                combined_positions.add(player['POS2'])
-                        if not set(traded_out_positions).issubset(combined_positions):
-                            continue
-                    
+                first_player = flat_players[i]
+                remaining_salary = salary_freed - first_player['Price']
+                
+                # Filter second players based on position requirements
+                if traded_out_positions:
+                    needed_positions = [pos for pos in traded_out_positions if pos != first_player['POS1']]
+                    if needed_positions:
+                        needed_position = needed_positions[0]
+                    else:
+                        needed_position = first_player['POS1']
+                    valid_second_players = [
+                        p for p in flat_players[i+1:]
+                        if (p['POS1'] == needed_position or 
+                            (pd.notna(p.get('POS2')) and p['POS2'] == needed_position))
+                        and p['Player'] not in used_players
+                        and p['Price'] <= remaining_salary
+                    ]
+                else:
+                    valid_second_players = [
+                        p for p in flat_players[i+1:]
+                        if p['Player'] not in used_players
+                        and p['Price'] <= remaining_salary
+                    ]
+                
+                # Sort valid second players by avg_base
+                valid_second_players.sort(key=lambda x: x['avg_base'], reverse=True)
+                
+                for second_player in valid_second_players:
                     total_price = first_player['Price'] + second_player['Price']
                     if total_price <= salary_freed:
-                        combo = create_combination([first_player, second_player], total_price, salary_freed)
+                        combo = create_combination(
+                            [first_player, second_player],
+                            total_price,
+                            salary_freed
+                        )
                         valid_combinations.append(combo)
                         used_players.add(first_player['Player'])
                         used_players.add(second_player['Player'])
-                        valid_combo_found = True
-                        break  # Exit j loop after finding a valid pair
+                        break  # Move to next first player after finding a valid combination
                 
-                if valid_combo_found:
-                    if len(valid_combinations) >= max_options:
-                        break
-                    
+                if len(valid_combinations) >= max_options:
+                    break
     elif hybrid_approach:
         value_players = []
         for level in sorted(position_filtered_groups.keys()):
