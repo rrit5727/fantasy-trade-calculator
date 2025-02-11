@@ -1,14 +1,11 @@
 import pandas as pd
-from functools import lru_cache
-from typing import Dict, Set, Tuple
-import numpy as np
+from typing import List, Dict, Tuple
 from dataclasses import dataclass
 from itertools import combinations
 from datetime import datetime
 from sqlalchemy import create_engine
 import os
 from dotenv import load_dotenv
-
 
 @dataclass
 class Player:
