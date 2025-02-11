@@ -107,16 +107,14 @@ def get_rounds_data(df: pd.DataFrame) -> List[pd.DataFrame]:
     rounds = sorted(df['Round'].unique())
     return [df[df['Round'] == round_num].copy() for round_num in rounds]
 
-def check_consistent_performance(
-    player_name: str,
-    consolidated_data: pd.DataFrame,
-    min_base_premium: int = 5,
-    required_consecutive_weeks: int = 2
-) -> int:
+def check_consistent_performance(player_name: str, consolidated_data: pd.DataFrame, min_base_premium: int = 5, required_consecutive_weeks: int = 2, player_histories: Dict[str, pd.DataFrame] = None) -> int:
     """
     Check how many consecutive weeks a player has maintained good performance.
     """
-    player_data = consolidated_data[consolidated_data['Player'] == player_name].sort_values('Round')
+    if player_histories is not None and player_name in player_histories:
+        player_data = player_histories[player_name]
+    else:
+        player_data = consolidated_data[consolidated_data['Player'] == player_name].sort_values('Round')
     
     if player_data.empty:
         return 0
@@ -140,7 +138,8 @@ def check_rule_condition(
     base_premium_threshold: int,
     weeks_threshold: int,
     position_requirement: str = None,
-    max_age: int = None
+    max_age: int = None,
+    player_histories: Dict[str, pd.DataFrame] = None
 ) -> bool:
     """
     Check if a player meets the specified rule conditions.
@@ -155,7 +154,11 @@ def check_rule_condition(
     
     # Check consecutive weeks requirement
     player_name = player_data['Player']
-    player_history = consolidated_data[consolidated_data['Player'] == player_name].sort_values('Round')
+    
+    if player_histories is not None and player_name in player_histories:
+        player_history = player_histories[player_name].sort_values('Round')
+    else:
+        player_history = consolidated_data[consolidated_data['Player'] == player_name].sort_values('Round')
     
     # Check if the player has met the threshold for the required consecutive weeks
     current_streak = 0
@@ -183,120 +186,119 @@ def check_rule_condition(
         
     return meets_bpre and meets_weeks and meets_position and meets_age
 
-def assign_priority_level(player_data: pd.Series, consolidated_data: pd.DataFrame) -> int:
+def assign_priority_level(player_data: pd.Series, consolidated_data: pd.DataFrame, player_histories: Dict[str, pd.DataFrame] = None) -> int:
     """
     Assign priority level based on the updated rules.
     """
     # Rule 1: BPRE >= 14 for last 3 weeks
-    if check_rule_condition(player_data, consolidated_data, 14, 3):
+    if check_rule_condition(player_data, consolidated_data, 14, 3, player_histories=player_histories):
         return 1
         
     # Rule 2: BPRE >= 21 for last 2 weeks
-    if check_rule_condition(player_data, consolidated_data, 21, 2):
+    if check_rule_condition(player_data, consolidated_data, 21, 2, player_histories=player_histories):
         return 2
         
     # Rule 3: 2 week Average BPRE >= 26
-    if calculate_average_bpre(player_data['Player'], consolidated_data, 2) >= 26:
+    if calculate_average_bpre(player_data['Player'], consolidated_data, 2, player_histories=player_histories) >= 26:
         return 3
         
     # Rule 4: BPRE >= 12 for last 3 weeks
-    if check_rule_condition(player_data, consolidated_data, 12, 3):
+    if check_rule_condition(player_data, consolidated_data, 12, 3, player_histories=player_histories):
         return 4
         
     # Rule 5: BPRE >= 19 for last 2 weeks
-    if check_rule_condition(player_data, consolidated_data, 19, 2):
+    if check_rule_condition(player_data, consolidated_data, 19, 2, player_histories=player_histories):
         return 5
         
     # Rule 6: 2 week Average BPRE >= 24
-    if calculate_average_bpre(player_data['Player'], consolidated_data, 2) >= 24:
+    if calculate_average_bpre(player_data['Player'], consolidated_data, 2, player_histories=player_histories) >= 24:
         return 6
         
     # Rule 7: BPRE >= 10 for last 3 weeks
-    if check_rule_condition(player_data, consolidated_data, 10, 3):
+    if check_rule_condition(player_data, consolidated_data, 10, 3, player_histories=player_histories):
         return 7
         
     # Rule 8: BPRE >= 17 for last 2 weeks
-    if check_rule_condition(player_data, consolidated_data, 17, 2):
+    if check_rule_condition(player_data, consolidated_data, 17, 2, player_histories=player_histories):
         return 8
         
     # Rule 9: 2 week Average BPRE >= 22
-    if calculate_average_bpre(player_data['Player'], consolidated_data, 2) >= 22:
+    if calculate_average_bpre(player_data['Player'], consolidated_data, 2, player_histories=player_histories) >= 22:
         return 9
         
     # Rule 10: BPRE >= 8 for last 3 weeks
-    if check_rule_condition(player_data, consolidated_data, 8, 3):
+    if check_rule_condition(player_data, consolidated_data, 8, 3, player_histories=player_histories):
         return 10
         
     # Rule 11: BPRE >= 15 for last 2 weeks
-    if check_rule_condition(player_data, consolidated_data, 15, 2):
+    if check_rule_condition(player_data, consolidated_data, 15, 2, player_histories=player_histories):
         return 11
         
     # Rule 12: 2 week Average BPRE >= 20
-    if calculate_average_bpre(player_data['Player'], consolidated_data, 2) >= 20:
+    if calculate_average_bpre(player_data['Player'], consolidated_data, 2, player_histories=player_histories) >= 20:
         return 12
         
     # Rule 13: BPRE >= 6 for last 3 weeks
-    if check_rule_condition(player_data, consolidated_data, 6, 3):
+    if check_rule_condition(player_data, consolidated_data, 6, 3, player_histories=player_histories):
         return 13
         
     # Rule 14: BPRE >= 13 for last 2 weeks
-    if check_rule_condition(player_data, consolidated_data, 13, 2):
+    if check_rule_condition(player_data, consolidated_data, 13, 2, player_histories=player_histories):
         return 14
         
     # Rule 15: 2 week Average BPRE >= 18
-    if calculate_average_bpre(player_data['Player'], consolidated_data, 2) >= 18:
+    if calculate_average_bpre(player_data['Player'], consolidated_data, 2, player_histories=player_histories) >= 18:
         return 15
         
     # Rule 16: BPRE >= 10 for last 2 weeks
-    if check_rule_condition(player_data, consolidated_data, 10, 2):
+    if check_rule_condition(player_data, consolidated_data, 10, 2, player_histories=player_histories):
         return 16
         
     # Rule 17: 2 week Average BPRE >= 15
-    if calculate_average_bpre(player_data['Player'], consolidated_data, 2) >= 15:
+    if calculate_average_bpre(player_data['Player'], consolidated_data, 2, player_histories=player_histories) >= 15:
         return 17
         
     # Rule 18: BPRE >= 8 for last 2 weeks
-    if check_rule_condition(player_data, consolidated_data, 8, 2):
+    if check_rule_condition(player_data, consolidated_data, 8, 2, player_histories=player_histories):
         return 18
         
     # Rule 19: 2 week Average BPRE >= 13
-    if calculate_average_bpre(player_data['Player'], consolidated_data, 2) >= 13:
+    if calculate_average_bpre(player_data['Player'], consolidated_data, 2, player_histories=player_histories) >= 13:
         return 19
         
     # Rule 20: BPRE >= 6 for last 2 weeks
-    if check_rule_condition(player_data, consolidated_data, 6, 2):
+    if check_rule_condition(player_data, consolidated_data, 6, 2, player_histories=player_histories):
         return 20
         
     # Rule 21: 2 week Average BPRE >= 11
-    if calculate_average_bpre(player_data['Player'], consolidated_data, 2) >= 11:
+    if calculate_average_bpre(player_data['Player'], consolidated_data, 2, player_histories=player_histories) >= 11:
         return 21
         
     # Rule 22: BPRE >= 2 for last 3 weeks
-    if check_rule_condition(player_data, consolidated_data, 2, 3):
+    if check_rule_condition(player_data, consolidated_data, 2, 3, player_histories=player_histories):
         return 22
         
     # Rule 23: BPRE >= 4 for last 2 weeks
-    if check_rule_condition(player_data, consolidated_data, 4, 2):
+    if check_rule_condition(player_data, consolidated_data, 4, 2, player_histories=player_histories):
         return 23
         
     # Rule 24: 2 week Average BPRE >= 9
-    if calculate_average_bpre(player_data['Player'], consolidated_data, 2) >= 9:
+    if calculate_average_bpre(player_data['Player'], consolidated_data, 2, player_histories=player_histories) >= 9:
         return 24
         
     # Default - lowest priority
     return 25
 
-def calculate_average_bpre(
-    player_name: str,
-    consolidated_data: pd.DataFrame,
-    lookback_weeks: int = 3
-) -> float:
+def calculate_average_bpre(player_name: str, consolidated_data: pd.DataFrame, lookback_weeks: int = 3, player_histories: Dict[str, pd.DataFrame] = None) -> float:
     """
     Calculate average BPRE for a player over their recent weeks.
     Only calculate the average if the player has played in at least `lookback_weeks` rounds.
     Exclude Mid/EDG players who are 29 years or older.
     """
-    player_data = consolidated_data[consolidated_data['Player'] == player_name].sort_values('Round', ascending=False)
+    if player_histories is not None and player_name in player_histories:
+        player_data = player_histories[player_name].sort_values('Round', ascending=False)
+    else:
+        player_data = consolidated_data[consolidated_data['Player'] == player_name].sort_values('Round', ascending=False)
     
     # Exclude Mid/EDG players who are 29 years or older
     if not player_data.empty:
@@ -311,12 +313,7 @@ def calculate_average_bpre(
     
     return int(recent_data['Base exceeds price premium'].mean())
 
-def calculate_average_base(
-    player_name: str,
-    consolidated_data: pd.DataFrame,
-    lookback_weeks: int = 3,
-    min_games: int = 2  # New parameter to specify minimum games required
-) -> float:
+def calculate_average_base(player_name: str, consolidated_data: pd.DataFrame, lookback_weeks: int = 3, min_games: int = 2, player_histories: Dict[str, pd.DataFrame] = None) -> float:
     """
     Calculate average Total base for a player over their recent weeks.
     Only calculate the average if the player has played in at least `min_games` rounds.
@@ -330,7 +327,10 @@ def calculate_average_base(
     Returns:
     float: Average base value, or 0.0 if minimum games requirement not met
     """
-    player_data = consolidated_data[consolidated_data['Player'] == player_name].sort_values('Round', ascending=False)
+    if player_histories is not None and player_name in player_histories:
+        player_data = player_histories[player_name].sort_values('Round', ascending=False)
+    else:
+        player_data = consolidated_data[consolidated_data['Player'] == player_name].sort_values('Round', ascending=False)
     recent_data = player_data.head(lookback_weeks)
     
     # Check if player has played minimum required games
@@ -338,7 +338,7 @@ def calculate_average_base(
         return int(recent_data['Total base'].mean())
     return 0.0
 
-def print_players_by_rule_level(available_players: pd.DataFrame, consolidated_data: pd.DataFrame, maximize_base: bool = False) -> None:
+def print_players_by_rule_level(available_players: pd.DataFrame, consolidated_data: pd.DataFrame, maximize_base: bool = False, player_histories: Dict[str, pd.DataFrame] = None) -> None:
     """
     Print players that satisfy each rule level, with their relevant stats.
     """
@@ -381,7 +381,7 @@ def print_players_by_rule_level(available_players: pd.DataFrame, consolidated_da
             # Calculate average BPRE for each player and add it to the DataFrame
             level_players = level_players.copy()
             level_players['avg_bpre'] = level_players['Player'].apply(
-                lambda x: calculate_average_bpre(x, consolidated_data)
+                lambda x: calculate_average_bpre(x, consolidated_data, player_histories=player_histories)
             )
             
             # Sort players by average BPRE within the rule level
@@ -456,53 +456,41 @@ def generate_comprehensive_trade_options(
                     if len(valid_combinations) >= max_options:
                         break
         else:
-            # For two-player combinations
             for i in range(len(flat_players)):
                 if flat_players[i]['Player'] in used_players:
                     continue
                     
-                first_player = flat_players[i]
-                remaining_salary = salary_freed - first_player['Price']
-                
-                # Filter second players based on position requirements
-                if traded_out_positions:
-                    needed_positions = [pos for pos in traded_out_positions if pos != first_player['POS1']]
-                    if needed_positions:
-                        needed_position = needed_positions[0]
-                    else:
-                        needed_position = first_player['POS1']
-                    valid_second_players = [
-                        p for p in flat_players[i+1:]
-                        if (p['POS1'] == needed_position or 
-                            (pd.notna(p.get('POS2')) and p['POS2'] == needed_position))
-                        and p['Player'] not in used_players
-                        and p['Price'] <= remaining_salary
-                    ]
-                else:
-                    valid_second_players = [
-                        p for p in flat_players[i+1:]
-                        if p['Player'] not in used_players
-                        and p['Price'] <= remaining_salary
-                    ]
-                
-                # Sort valid second players by avg_base
-                valid_second_players.sort(key=lambda x: x['avg_base'], reverse=True)
-                
-                for second_player in valid_second_players:
+                valid_combo_found = False
+                for j in range(i + 1, len(flat_players)):
+                    if flat_players[j]['Player'] in used_players:
+                        continue
+                        
+                    first_player = flat_players[i]
+                    second_player = flat_players[j]
+                    
+                    # Check positions if traded_out_positions is specified and requires coverage
+                    if traded_out_positions and (trade_type == 'likeForLike' or (trade_type == 'positionalSwap' and len(traded_out_positions) == 2)):
+                        combined_positions = set()
+                        for player in [first_player, second_player]:
+                            combined_positions.add(player['POS1'])
+                            if pd.notna(player['POS2']):
+                                combined_positions.add(player['POS2'])
+                        if not set(traded_out_positions).issubset(combined_positions):
+                            continue
+                    
                     total_price = first_player['Price'] + second_player['Price']
                     if total_price <= salary_freed:
-                        combo = create_combination(
-                            [first_player, second_player],
-                            total_price,
-                            salary_freed
-                        )
+                        combo = create_combination([first_player, second_player], total_price, salary_freed)
                         valid_combinations.append(combo)
                         used_players.add(first_player['Player'])
                         used_players.add(second_player['Player'])
-                        break  # Move to next first player after finding a valid combination
+                        valid_combo_found = True
+                        break  # Exit j loop after finding a valid pair
                 
-                if len(valid_combinations) >= max_options:
-                    break
+                if valid_combo_found:
+                    if len(valid_combinations) >= max_options:
+                        break
+                    
     elif hybrid_approach:
         value_players = []
         for level in sorted(position_filtered_groups.keys()):
@@ -853,30 +841,33 @@ def calculate_trade_options(
     available_players['consecutive_good_weeks'] = 0
     
     # Calculate consistency for each player
+    player_histories = {player: group.sort_values('Round') for player, group in consolidated_data.groupby('Player')}
+    
     for idx, player in available_players.iterrows():
         consecutive_weeks = check_consistent_performance(
             player['Player'], 
-            consolidated_data
+            consolidated_data,
+            player_histories=player_histories
         )
         available_players.at[idx, 'consecutive_good_weeks'] = consecutive_weeks
     
     # Calculate averages using all available games in last 3 rounds
     available_players['avg_bpre'] = available_players['Player'].apply(
-        lambda x: calculate_average_bpre(x, consolidated_data)
+        lambda x: calculate_average_bpre(x, consolidated_data, player_histories=player_histories)
     )
     
     available_players['avg_base'] = available_players['Player'].apply(
-        lambda x: calculate_average_base(x, consolidated_data, min_games=min_games)
+        lambda x: calculate_average_base(x, consolidated_data, min_games=min_games, player_histories=player_histories)
     )
 
     # Calculate priority levels
     available_players['priority_level'] = available_players.apply(
-        lambda row: assign_priority_level(row, consolidated_data), 
+        lambda row: assign_priority_level(row, consolidated_data, player_histories=player_histories), 
         axis=1
     )
 
     # Print players by rule level
-    print_players_by_rule_level(available_players, consolidated_data)
+    print_players_by_rule_level(available_players, consolidated_data, player_histories=player_histories)
 
     # Group players by priority level
     priority_groups = {}
