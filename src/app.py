@@ -183,6 +183,7 @@ def get_players():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=5000, debug=True)
     try:
         while True:
             choice = input("\nDo you want to:\n1. Run the ordinary trade calculator\n2. Run rule set simulation for 1 player\nEnter 1 or 2: ")
