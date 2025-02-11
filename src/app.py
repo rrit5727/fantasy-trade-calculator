@@ -4,6 +4,12 @@ from typing import List, Dict, Any
 import traceback
 import pandas as pd
 
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
 app = Flask(__name__)
 
 def prepare_trade_option(option: Dict[str, Any]) -> Dict[str, Any]:
@@ -191,19 +197,28 @@ if __name__ == "__main__":
                 break
             print("Invalid input. Please enter 1 or 2.")
 
-        file_path = "NRL_stats.xlsx" if choice == '1' else "player_simulation.xlsx"
-        consolidated_data = load_data()  # Removed file_path
+        # Load data from database
+        consolidated_data = load_data()
+        
+        if consolidated_data.empty:
+            raise ValueError("No data loaded from database")
+            
         print(f"Successfully loaded data for {consolidated_data['Round'].nunique()} rounds")
 
         if choice == '2':
+            # Get the player name for simulation
+            player_name = input("Enter player name for simulation: ")
+            if player_name not in consolidated_data['Player'].unique():
+                raise ValueError(f"Player {player_name} not found in database")
+            
+            player_data = consolidated_data[consolidated_data['Player'] == player_name]
             rounds = list(range(1, int(consolidated_data['Round'].max()) + 1))
-            simulate_rule_levels(consolidated_data, rounds)
+            simulate_rule_levels(player_data, rounds)
         else:
             app.run(debug=True)
 
-    except FileNotFoundError:
-        print("Error: Could not find data file in the current directory")
     except ValueError as e:
         print("Error:", str(e))
     except Exception as e:
         print("An error occurred:", str(e))
+        raise

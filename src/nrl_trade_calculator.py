@@ -22,8 +22,12 @@ class Player:
 def load_data() -> pd.DataFrame:
     """
     Load data from PostgreSQL database and rename columns to match expected names.
+    
+    Returns:
+    pd.DataFrame: DataFrame with standardized column names
     """
     # Read database connection parameters from environment
+    load_dotenv()
     db_params = {
         'host': os.getenv('DB_HOST'),
         'database': os.getenv('DB_DATABASE'),
@@ -36,44 +40,70 @@ def load_data() -> pd.DataFrame:
     conn_str = f"postgresql://{db_params['user']}:{db_params['password']}@{db_params['host']}:{db_params['port']}/{db_params['database']}"
     engine = create_engine(conn_str)
     
-    # Query all data from player_stats table
-    query = "SELECT * FROM player_stats;"
-    df = pd.read_sql(query, engine)
-    
-    # Map database columns to expected column names
-    column_mapping = {
-        'Base_exceeds_price_premium': 'Base exceeds price premium',
-        'Total_base': 'Total base',
-        'POS1': 'POS1',  # Already matches
-        'Round': 'Round',  # Already matches
-        'Team': 'Team',  # Already matches
-        'Player': 'Player',  # Already matches
-        'Age': 'Age'  # Already matches
-    }
-    df.rename(columns=column_mapping, inplace=True)
-    
-    # Clean numeric columns (same as original)
-    numeric_columns = ['Base exceeds price premium', 'Total base', 'Price']
-    for col in numeric_columns:
-        if col in df.columns:
-            df[col] = (df[col].astype(str)
-                          .str.replace(',', '')
-                          .str.replace(' ', '')
-                          .str.replace('"', '')
-                          .str.replace('None', '')  )
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-    
-    # Check required columns
-    required_columns = ['Round', 'Team', 'POS1']
-    for col in required_columns:
-        if col not in df.columns:
-            raise ValueError(f"Data must contain a '{col}' column")
-    
-    # Handle POS2
-    if 'POS2' not in df.columns:
-        df['POS2'] = None
-    
-    return df
+    try:
+        # First, let's see what columns we actually have in the database
+        with engine.connect() as connection:
+            # Get column names from the table
+            query = """
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'player_stats';
+            """
+            db_columns = pd.read_sql(query, connection)
+            print("Available columns in database:", db_columns['column_name'].tolist())
+            
+            # Now fetch the actual data
+            query = "SELECT * FROM player_stats;"
+            df = pd.read_sql(query, connection)
+            
+            # Print the actual column names we got
+            print("\nActual columns in DataFrame:", df.columns.tolist())
+            
+        # Updated column mapping to match the database column names
+        column_mapping = {
+            'Base_exceeds_price_premium': 'Base exceeds price premium',
+            'Total_base': 'Total base',
+            'POS1': 'POS1',  # These don't need to change but included for clarity
+            'Round': 'Round',
+            'Team': 'Team',
+            'Player': 'Player',
+            'Age': 'Age',
+            'Price': 'Price',
+            'POS2': 'POS2'
+        }
+        
+        # Only rename columns that exist in both the DataFrame and mapping
+        existing_columns = {k: v for k, v in column_mapping.items() if k in df.columns}
+        df.rename(columns=existing_columns, inplace=True)
+        
+        # Clean numeric columns
+        numeric_columns = ['Base exceeds price premium', 'Total base', 'Price']
+        for col in numeric_columns:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col].fillna(0), errors='coerce').fillna(0)
+        
+        # Print final column names after transformation
+        print("\nFinal columns after transformation:", df.columns.tolist())
+        
+        # Ensure required columns exist
+        required_columns = ['Round', 'Team', 'POS1', 'Player', 'Price', 
+                          'Base exceeds price premium', 'Total base', 'Age']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            raise ValueError(f"Missing required columns: {', '.join(missing_columns)}")
+        
+        # Convert Round to integer
+        df['Round'] = df['Round'].astype(int)
+        
+        # Handle POS2 if it exists
+        if 'POS2' not in df.columns:
+            df['POS2'] = None
+            
+        return df
+        
+    except Exception as e:
+        print(f"Error loading data from database: {str(e)}")
+        raise
 
 def get_rounds_data(df: pd.DataFrame) -> List[pd.DataFrame]:
     """
