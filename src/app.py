@@ -3,14 +3,18 @@ from nrl_trade_calculator import calculate_trade_options, load_data, assign_prio
 from typing import List, Dict, Any
 import traceback
 import pandas as pd
-
 import os
 from dotenv import load_dotenv
+from flask_caching import Cache
 
 # Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
+
+# Configure Flask-Caching
+cache = Cache(config={'CACHE_TYPE': 'SimpleCache', 'CACHE_DEFAULT_TIMEOUT': 300})
+cache.init_app(app)
 
 def prepare_trade_option(option: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -56,8 +60,7 @@ def check_player_lockout():
         player_name = request.form['player_name']
         simulate_datetime = request.form.get('simulateDateTime')
         
-        file_path = "NRL_stats.xlsx"
-        consolidated_data = load_data(file_path)
+        consolidated_data = load_data()
         
         is_locked = is_player_locked(player_name, consolidated_data, simulate_datetime)
         
@@ -69,51 +72,6 @@ def check_player_lockout():
         return jsonify({
             'error': str(e)
         }), 500
-
-def simulate_rule_levels(consolidated_data: pd.DataFrame, rounds: List[int]) -> None:
-    player_name = consolidated_data['Player'].unique()[0]  # Assuming the first player in the data
-
-    rule_descriptions = {
-        1: "BPRE >= 14 for last 3 weeks",
-        2: "BPRE >= 21 for last 2 weeks",
-        3: "2 week Average BPRE >= 26",
-        4: "BPRE >= 12 for last 3 weeks",
-        5: "BPRE >= 19 for last 2 weeks",
-        6: "2 week Average BPRE >= 24",
-        7: "BPRE >= 10 for last 3 weeks",
-        8: "BPRE >= 17 for last 2 weeks",
-        9: "2 week Average BPRE >= 22",
-        10: "BPRE >= 8 for last 3 weeks",
-        11: "BPRE >= 15 for last 2 weeks",
-        12: "2 week Average BPRE >= 20",
-        13: "BPRE >= 6 for last 3 weeks",
-        14: "BPRE >= 13 for last 2 weeks",
-        15: "2 week Average BPRE >= 18",
-        16: "BPRE >= 10 for last 2 weeks",
-        17: "2 week Average BPRE >= 15",
-        18: "BPRE >= 8 for last 2 weeks",
-        19: "2 week Average BPRE >= 13",
-        20: "BPRE >= 6 for last 2 weeks",
-        21: "2 week Average BPRE >= 11",
-        22: "BPRE >= 2 for last 3 weeks",
-        23: "BPRE >= 4 for last 2 weeks",
-        24: "2 week Average BPRE >= 9",
-        25: "No rules satisfied"
-    }
-
-    for round_num in rounds:
-        recent_rounds = sorted(consolidated_data['Round'].unique())
-        recent_rounds = [r for r in recent_rounds if r <= round_num][-4:]
-        cumulative_data = consolidated_data[consolidated_data['Round'].isin(recent_rounds)]
-        player_data = cumulative_data[cumulative_data['Player'] == player_name]
-        
-        if player_data.empty:
-            print(f"Round {round_num}: No data for player {player_name}")
-            continue
-        
-        priority_level = assign_priority_level(player_data.iloc[-1], cumulative_data)
-        rule_description = rule_descriptions.get(priority_level, "Unknown rule")
-        print(f"Rule levels passed as at round {round_num}: Rule Level Satisfied: {priority_level} - {rule_description}")
 
 @app.route('/calculate', methods=['POST'])
 def calculate():
@@ -128,12 +86,12 @@ def calculate():
         simulate_datetime = request.form.get('simulateDateTime')
 
         # Load main data from database
-        consolidated_data = load_data()  # No file_path
+        consolidated_data = load_data()
 
         team_list = None
         if restrict_to_team_list:
             team_list_path = "teamlists.csv"
-            team_df = pd.read_csv(team_list_path)  # Directly read CSV
+            team_df = pd.read_csv(team_list_path)
             team_list = team_df['Player'].unique().tolist()
 
         maximize_base = (strategy == '2')
@@ -181,9 +139,10 @@ def calculate():
         }), 500
 
 @app.route('/players', methods=['GET'])
+@cache.cached(timeout=300)
 def get_players():
     try:
-        consolidated_data = load_data()  # No file_path
+        consolidated_data = load_data()
         player_names = consolidated_data['Player'].unique().tolist()
         return jsonify(player_names)
     except Exception as e:
@@ -206,7 +165,6 @@ if __name__ == "__main__":
         print(f"Successfully loaded data for {consolidated_data['Round'].nunique()} rounds")
 
         if choice == '2':
-            # Get the player name for simulation
             player_name = input("Enter player name for simulation: ")
             if player_name not in consolidated_data['Player'].unique():
                 raise ValueError(f"Player {player_name} not found in database")
