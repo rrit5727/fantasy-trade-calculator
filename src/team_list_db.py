@@ -18,7 +18,7 @@ def create_team_lists_table(conn, df):
     CREATE TABLE team_lists (
         id SERIAL PRIMARY KEY,
         "Player_Number" INTEGER,
-        "Player_Name" VARCHAR(100)
+        "Player" VARCHAR(100)
     );
     """
     with conn.cursor() as cur:
@@ -31,7 +31,7 @@ def import_teamlists_data(excel_file_path):
     
     Expects the Excel file to have exactly two columns:
       - "Player Number"
-      - "Player Name"
+      - "Player"
     """
     # Read Excel file
     df = pd.read_excel(excel_file_path)
@@ -41,8 +41,8 @@ def import_teamlists_data(excel_file_path):
     for col in df.columns:
         print(f"- '{col}'")
     
-    # Define the required columns (using exact Names as in the Excel file)
-    required_columns = ['Player Number', 'Player Name']
+    # Define the required columns (using exact names as in the Excel file)
+    required_columns = ['Player Number', 'Player']
     
     # Filter DataFrame to include only required columns
     try:
